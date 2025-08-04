@@ -18,19 +18,19 @@ import {
   View,
 } from "react-native";
 import * as Animatable from "react-native-animatable";
-import Svg, { Path, Rect } from "react-native-svg";
+import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 
 const primaryColor = "#2C6BED";
 const secondaryColor = "#1A56DB";
 const accentColor = "#0E9F6E";
 const lightBackground = "#F9FAFB";
-const { height } = Dimensions.get("window");
+const { height, width } = Dimensions.get("window");
 
 // Predefined AB/2 and M.N values
 const AB2_VALUES = [
   1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 8.0, 10.0, 13.0, 16.0, 16.0, 20.0, 25.0,
-  32.0, 32.0, 40.0, 50.0, 63.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0,
+  32.0, 32.0, 40.0, 50.0, 63.0, 80.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0,
 ];
 const MN_VALUES = [
   0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 5.0, 5.0, 5.0, 5.0,
@@ -40,15 +40,196 @@ const MN_VALUES = [
 // Key for AsyncStorage
 const PROJECTS_STORAGE_KEY = "VES_PROJECTS";
 
+// Graph component
+const VESGraph = ({ data, title, color, width, height }) => {
+  if (!data || data.length === 0) {
+    return (
+      <View style={[localStyles.graphContainer, { width, height }]}>
+        <Text style={localStyles.graphTitle}>{title}</Text>
+        <Text style={localStyles.noDataText}>No data available</Text>
+      </View>
+    );
+  }
+
+  const padding = 40;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  // Get min/max values for scaling
+  const xValues = data.map(d => d.x);
+  const yValues = data.map(d => d.y);
+  const xMin = Math.min(...xValues);
+  const xMax = Math.max(...xValues);
+  const yMin = Math.min(0, ...yValues);
+  const yMax = Math.max(...yValues) * 1.1; // Add 10% padding
+
+  // Scale functions
+  const scaleX = (x) => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
+  const scaleY = (y) => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
+
+  // Generate axis labels
+  const xAxisLabels = [];
+  const yAxisLabels = [];
+  
+  // X-axis labels (logarithmic spacing)
+  const logMin = Math.log10(xMin);
+  const logMax = Math.log10(xMax);
+  const logRange = logMax - logMin;
+  
+  for (let i = Math.floor(logMin); i <= Math.ceil(logMax); i++) {
+    const value = Math.pow(10, i);
+    if (value >= xMin && value <= xMax) {
+      xAxisLabels.push({
+        value,
+        position: scaleX(value)
+      });
+    }
+  }
+
+  // Y-axis labels
+  const yStep = Math.pow(10, Math.floor(Math.log10(yMax)));
+  for (let y = 0; y <= yMax; y += yStep) {
+    if (y <= yMax) {
+      yAxisLabels.push({
+        value: y,
+        position: scaleY(y)
+      });
+    }
+  }
+
+  return (
+    <View style={[localStyles.graphContainer, { width, height }]}>
+      <Text style={localStyles.graphTitle}>{title}</Text>
+      <Svg width={width} height={height}>
+        {/* Axes */}
+        <Line
+          x1={padding}
+          y1={padding + chartHeight}
+          x2={padding + chartWidth}
+          y2={padding + chartHeight}
+          stroke="#CBD5E1"
+          strokeWidth={1}
+        />
+        <Line
+          x1={padding}
+          y1={padding}
+          x2={padding}
+          y2={padding + chartHeight}
+          stroke="#CBD5E1"
+          strokeWidth={1}
+        />
+
+        {/* Grid lines and labels */}
+        {xAxisLabels.map((label, index) => (
+          <G key={`x-${index}`}>
+            <Line
+              x1={label.position}
+              y1={padding}
+              x2={label.position}
+              y2={padding + chartHeight}
+              stroke="#E2E8F0"
+              strokeWidth={0.5}
+              strokeDasharray="4,4"
+            />
+            <SvgText
+              x={label.position}
+              y={padding + chartHeight + 15}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#64748B"
+            >
+              {label.value}
+            </SvgText>
+          </G>
+        ))}
+
+        {yAxisLabels.map((label, index) => (
+          <G key={`y-${index}`}>
+            <Line
+              x1={padding}
+              y1={label.position}
+              x2={padding + chartWidth}
+              y2={label.position}
+              stroke="#E2E8F0"
+              strokeWidth={0.5}
+              strokeDasharray="4,4"
+            />
+            <SvgText
+              x={padding - 10}
+              y={label.position + 4}
+              textAnchor="end"
+              fontSize="10"
+              fill="#64748B"
+            >
+              {label.value}
+            </SvgText>
+          </G>
+        ))}
+
+        {/* Data points and line */}
+        {data.map((point, index) => {
+          if (index === 0) return null;
+          
+          return (
+            <G key={`point-${index}`}>
+              <Line
+                x1={scaleX(data[index - 1].x)}
+                y1={scaleY(data[index - 1].y)}
+                x2={scaleX(point.x)}
+                y2={scaleY(point.y)}
+                stroke={color}
+                strokeWidth={2}
+              />
+              <Circle
+                cx={scaleX(point.x)}
+                cy={scaleY(point.y)}
+                r={4}
+                fill="white"
+                stroke={color}
+                strokeWidth={2}
+              />
+            </G>
+          );
+        })}
+
+        {/* Axis titles */}
+        <SvgText
+          x={width / 2}
+          y={height - 5}
+          textAnchor="middle"
+          fontSize="12"
+          fontWeight="bold"
+          fill="#475569"
+        >
+          AB/2 (m)
+        </SvgText>
+        <SvgText
+          x={10}
+          y={height / 2}
+          textAnchor="middle"
+          fontSize="12"
+          fontWeight="bold"
+          fill="#475569"
+          transform={`rotate(-90, 10, ${height / 2})`}
+        >
+          {title.includes("Resistivity") ? "Resistivity (Ω·m)" : "TDIP"}
+        </SvgText>
+      </Svg>
+    </View>
+  );
+};
+
 const DataEntryScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const viewRef = useRef();
+  const graphRef = useRef();
   const scrollRef = useRef();
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [currentVES, setCurrentVES] = useState(1);
   const [readings, setReadings] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("Resistivity");
   const [projectData, setProjectData] = useState({
     id: Date.now().toString(),
     name: params.projectName || "New Project",
@@ -139,6 +320,30 @@ const DataEntryScreen = () => {
     });
   };
 
+  // Prepare graph data
+  const getGraphData = () => {
+    const resistivityData = [];
+    const tdipData = [];
+    
+    readings.forEach((reading) => {
+      if (reading.resistivity) {
+        resistivityData.push({
+          x: reading.ab2,
+          y: parseFloat(reading.resistivity) || 0
+        });
+      }
+      
+      if (reading.tdip) {
+        tdipData.push({
+          x: reading.ab2,
+          y: parseFloat(reading.tdip) || 0
+        });
+      }
+    });
+    
+    return { resistivityData, tdipData };
+  };
+
   // Save project data to AsyncStorage
   const saveProjectToStorage = async (project) => {
     try {
@@ -206,10 +411,15 @@ const DataEntryScreen = () => {
       // Move to next VES
       setCurrentVES((prev) => prev + 1);
 
-      // Reset readings for next VES
+      // Reset readings for next VES and scroll to top
       setReadings((prev) =>
         prev.map((r) => ({ ...r, resistivity: "", tdip: "" }))
       );
+      
+      // Scroll to top of table
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+      }, 100);
 
       Alert.alert("Success", `VES${currentVES} saved successfully!`);
     } catch (error) {
@@ -283,34 +493,33 @@ const DataEntryScreen = () => {
     );
   };
 
-  // Capture screenshot of entire screen
-  const captureScreen = async () => {
+  // Capture screenshot of graph
+  const captureGraph = async () => {
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission required",
-          "Please allow access to save screenshots"
+          "Please allow access to save graphs"
         );
         return;
       }
 
-      const uri = await captureRef(viewRef, {
+      const uri = await captureRef(graphRef, {
         format: "png",
         quality: 1.0,
-        height: height * 2, // Capture full height
       });
 
       const asset = await MediaLibrary.createAssetAsync(uri);
-      await MediaLibrary.createAlbumAsync("VES Surveys", asset, false);
+      await MediaLibrary.createAlbumAsync("VES Graphs", asset, false);
 
       Alert.alert(
-        "Screenshot Saved",
-        "The screen capture has been saved to your gallery"
+        "Graph Saved",
+        `The ${activeTab} graph for VES${currentVES} has been saved to your gallery`
       );
     } catch (error) {
       console.error("Capture error:", error);
-      Alert.alert("Error", "Failed to capture screen");
+      Alert.alert("Error", "Failed to save graph");
     }
   };
 
@@ -394,6 +603,10 @@ const DataEntryScreen = () => {
     </View>
   );
 
+  const { resistivityData, tdipData } = getGraphData();
+  const graphWidth = width - 40;
+  const graphHeight = 300;
+
   return (
     <ScrollView contentContainerStyle={localStyles.container} ref={viewRef}>
       {/* Header */}
@@ -474,6 +687,83 @@ const DataEntryScreen = () => {
         </Text>
       </Animatable.View>
 
+      {/* Graph Section */}
+      <Animatable.View
+        animation="fadeInUp"
+        delay={500}
+        style={localStyles.graphCard}
+      >
+        <View style={localStyles.sectionHeader}>
+          <Ionicons name="analytics-outline" size={24} color={accentColor} />
+          <Text style={localStyles.sectionTitle}>Real-time Visualization</Text>
+        </View>
+        
+        {/* Graph Tabs */}
+        <View style={localStyles.tabContainer}>
+          <TouchableOpacity
+            style={[
+              localStyles.tabButton,
+              activeTab === "Resistivity" && localStyles.activeTab
+            ]}
+            onPress={() => setActiveTab("Resistivity")}
+          >
+            <Text style={[
+              localStyles.tabText,
+              activeTab === "Resistivity" && localStyles.activeTabText
+            ]}>
+              Resistivity
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              localStyles.tabButton,
+              activeTab === "TDIP" && localStyles.activeTab
+            ]}
+            onPress={() => setActiveTab("TDIP")}
+          >
+            <Text style={[
+              localStyles.tabText,
+              activeTab === "TDIP" && localStyles.activeTabText
+            ]}>
+              TD/IP
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Graph Container */}
+        <View ref={graphRef} style={localStyles.graphWrapper}>
+          {activeTab === "Resistivity" ? (
+            <VESGraph
+              data={resistivityData}
+              title={`Resistivity - VES${currentVES}`}
+              color={primaryColor}
+              width={graphWidth}
+              height={graphHeight}
+            />
+          ) : (
+            <VESGraph
+              data={tdipData}
+              title={`TD/IP - VES${currentVES}`}
+              color={accentColor}
+              width={graphWidth}
+              height={graphHeight}
+            />
+          )}
+        </View>
+        
+        {/* Graph Actions */}
+        <TouchableOpacity
+          style={localStyles.downloadButton}
+          onPress={captureGraph}
+        >
+          <Ionicons name="download-outline" size={20} color="white" />
+          <Text style={localStyles.downloadButtonText}>
+            DOWNLOAD {activeTab.toUpperCase()} GRAPH
+          </Text>
+        </TouchableOpacity>
+      </Animatable.View>
+
       {/* Action Buttons */}
       <View style={localStyles.actionContainer}>
         <TouchableOpacity
@@ -493,10 +783,10 @@ const DataEntryScreen = () => {
 
         <TouchableOpacity
           style={[localStyles.actionButton, { backgroundColor: "#2C6BED" }]}
-          onPress={captureScreen}
+          onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
         >
-          <Ionicons name="camera-outline" size={20} color="white" />
-          <Text style={localStyles.actionButtonText}>CAPTURE</Text>
+          <Ionicons name="arrow-up-outline" size={20} color="white" />
+          <Text style={localStyles.actionButtonText}>TOP</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -610,6 +900,18 @@ const localStyles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
+  graphCard: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -627,7 +929,7 @@ const localStyles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginTop: 10,
-    maxHeight: height * 0.5,
+    maxHeight: height * 0.4,
   },
   tableRow: {
     flexDirection: "row",
@@ -674,6 +976,74 @@ const localStyles = StyleSheet.create({
     color: "#64748B",
     marginTop: 10,
     textAlign: "center",
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    padding: 5,
+    marginBottom: 15,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  activeTab: {
+    backgroundColor: "white",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  tabText: {
+    fontFamily: "JosefinSans_600SemiBold",
+    fontSize: 14,
+    color: "#64748B",
+  },
+  activeTabText: {
+    color: primaryColor,
+  },
+  graphWrapper: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 10,
+    alignItems: "center",
+  },
+  graphContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  graphTitle: {
+    fontFamily: "JosefinSans_700Bold",
+    fontSize: 16,
+    color: secondaryColor,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  noDataText: {
+    fontFamily: "JosefinSans_400Regular",
+    fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 20,
+  },
+  downloadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: primaryColor,
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 15,
+  },
+  downloadButtonText: {
+    fontFamily: "JosefinSans_600SemiBold",
+    fontSize: 14,
+    color: "white",
+    marginLeft: 8,
   },
   actionContainer: {
     flexDirection: "row",
