@@ -32,7 +32,7 @@ const AB2_VALUES = [
   1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 8.0, 10.0, 13.0, 16.0, 16.0, 20.0, 25.0,
   32.0, 32.0, 40.0, 50.0, 63.0, 80.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0,
 ];
-const MN_VALUES = [
+const MN2_VALUES = [
   0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 5.0, 5.0, 5.0, 5.0,
   10.0, 10.0, 10.0, 10.0, 10.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0,
 ];
@@ -249,17 +249,38 @@ const DataEntryScreen = () => {
     vesPoints: [],
   });
 
+  // Calculate K factor
+  const calculateK = (ab2, mn2) => {
+    if (!ab2 || !mn2) return "";
+    const ab2Num = parseFloat(ab2);
+    const mn2Num = parseFloat(mn2);
+    
+    if (isNaN(ab2Num)) return "";
+    if (isNaN(mn2Num)) return "";
+    
+    const mn = 2 * mn2Num;
+    const numerator = Math.pow(ab2Num, 2) - Math.pow(mn2Num, 2);
+    if (numerator <= 0) return "";
+    
+    const k = (Math.PI * numerator) / mn;
+    return k.toFixed(2);
+  };
+
   // Initialize readings
   useEffect(() => {
-    const initialReadings = AB2_VALUES.map((ab2, index) => ({
-      id: index,
-      ab2,
-      mn: MN_VALUES[index] || 0.5,
-      resistivity: "",
-      tdip: "",
-      resistivityRef: React.createRef(),
-      tdipRef: React.createRef(),
-    }));
+    const initialReadings = AB2_VALUES.map((ab2, index) => {
+      const mn2 = MN2_VALUES[index] || 0.25;
+      return {
+        id: index,
+        ab2,
+        mn2,
+        k: calculateK(ab2, mn2),
+        resistivity: "",
+        tdip: "",
+        resistivityRef: React.createRef(),
+        tdipRef: React.createRef(),
+      };
+    });
     setReadings(initialReadings);
 
     // Set up date/time updater
@@ -316,6 +337,15 @@ const DataEntryScreen = () => {
     setReadings((prev) => {
       const newReadings = [...prev];
       newReadings[index][field] = value;
+      
+      // Recalculate K when AB/2 or MN/2 changes
+      if (field === "ab2" || field === "mn2") {
+        newReadings[index].k = calculateK(
+          field === "ab2" ? value : newReadings[index].ab2,
+          field === "mn2" ? value : newReadings[index].mn2
+        );
+      }
+      
       return newReadings;
     });
   };
@@ -387,7 +417,9 @@ const DataEntryScreen = () => {
         location,
         readings: readings.map((r) => ({
           ab2: r.ab2,
-          mn: r.mn,
+          mn2: r.mn2,
+          mn: 2 * r.mn2, // Store M.N = (MN/2) * 2
+          k: r.k,
           resistivity: r.resistivity,
           tdip: r.tdip,
         })),
@@ -523,17 +555,23 @@ const DataEntryScreen = () => {
     }
   };
 
+  // Check if device is tablet and in landscape
+  const isTablet = width >= 768;
+  const isLandscape = width > height;
+  const responsiveLayout = isTablet && isLandscape;
+
   // Render data table with scrollable body
   const renderDataTable = () => (
     <View style={localStyles.tableContainer}>
       {/* Fixed Table Header */}
       <View style={localStyles.tableRow}>
-        <Text style={[localStyles.tableHeader, { flex: 0.8 }]}>AB/2 (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: 0.8 }]}>M.N (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>
+        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 0.7 : 0.7 }]}>AB/2 (m)</Text>
+        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 0.7 : 0.7 }]}>MN/2 (m)</Text>
+        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1 : 1 }]}>K</Text>
+        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
           Resistivity (Ω·m)
         </Text>
-        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>TDIP</Text>
+        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1.2 : 1.2 }]}>TDIP</Text>
       </View>
 
       {/* Scrollable Table Body */}
@@ -545,19 +583,36 @@ const DataEntryScreen = () => {
         {readings.map((row, rowIndex) => (
           <View key={row.id} style={localStyles.tableRow}>
             <Text
-              style={[localStyles.tableCell, { flex: 0.8, fontWeight: "bold" }]}
+              style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7, fontWeight: "bold" }]}
             >
               {row.ab2}
             </Text>
+            
+            <TextInput
+              style={[localStyles.tableInput, { flex: responsiveLayout ? 0.7 : 0.7 }]}
+              value={row.mn2.toString()}
+              onChangeText={(value) =>
+                handleInputChange(rowIndex, "mn2", value)
+              }
+              keyboardType="decimal-pad"
+              placeholder="0.0"
+              placeholderTextColor="#94A3B8"
+              returnKeyType="next"
+              onSubmitEditing={() => {
+                // Move to K in same row
+                readings[rowIndex + 1]?.resistivityRef.current?.focus();
+              }}
+            />
+
             <Text
-              style={[localStyles.tableCell, { flex: 0.8, fontWeight: "bold" }]}
+              style={[localStyles.tableCell, { flex: responsiveLayout ? 1 : 1, fontWeight: "bold" }]}
             >
-              {row.mn}
+              {row.k}
             </Text>
 
             <TextInput
               ref={row.resistivityRef}
-              style={[localStyles.tableInput, { flex: 1.2 }]}
+              style={[localStyles.tableInput, { flex: responsiveLayout ? 1.2 : 1.2 }]}
               value={row.resistivity}
               onChangeText={(value) =>
                 handleInputChange(rowIndex, "resistivity", value)
@@ -574,7 +629,7 @@ const DataEntryScreen = () => {
 
             <TextInput
               ref={row.tdipRef}
-              style={[localStyles.tableInput, { flex: 1.2 }]}
+              style={[localStyles.tableInput, { flex: responsiveLayout ? 1.2 : 1.2 }]}
               value={row.tdip}
               onChangeText={(value) =>
                 handleInputChange(rowIndex, "tdip", value)
@@ -585,8 +640,8 @@ const DataEntryScreen = () => {
               returnKeyType={rowIndex === readings.length - 1 ? "done" : "next"}
               onSubmitEditing={() => {
                 if (rowIndex < readings.length - 1) {
-                  // Move to next row's resistivity
-                  readings[rowIndex + 1].resistivityRef.current?.focus();
+                  // Move to next row's MN/2
+                  readings[rowIndex + 1]?.resistivityRef.current?.focus();
                   // Scroll to next row
                   scrollRef.current?.scrollTo({
                     y: (rowIndex + 1) * 60,
@@ -604,8 +659,8 @@ const DataEntryScreen = () => {
   );
 
   const { resistivityData, tdipData } = getGraphData();
-  const graphWidth = width - 40;
-  const graphHeight = 300;
+  const graphWidth = responsiveLayout ? (width - 60) / 2 : width - 40;
+  const graphHeight = responsiveLayout ? 250 : 300;
 
   return (
     <ScrollView contentContainerStyle={localStyles.container} ref={viewRef}>
@@ -669,100 +724,109 @@ const DataEntryScreen = () => {
         </Text>
       </Animatable.View>
 
-      {/* Data Table */}
-      <Animatable.View
-        animation="fadeInUp"
-        delay={300}
-        style={localStyles.dataCard}
-      >
-        <View style={localStyles.sectionHeader}>
-          <Ionicons name="grid-outline" size={24} color={accentColor} />
-          <Text style={localStyles.sectionTitle}>Survey Measurements</Text>
-        </View>
-
-        {renderDataTable()}
-
-        <Text style={localStyles.tableNote}>
-          Press "Next" after entering TDIP to automatically move to the next row
-        </Text>
-      </Animatable.View>
-
-      {/* Graph Section */}
-      <Animatable.View
-        animation="fadeInUp"
-        delay={500}
-        style={localStyles.graphCard}
-      >
-        <View style={localStyles.sectionHeader}>
-          <Ionicons name="analytics-outline" size={24} color={accentColor} />
-          <Text style={localStyles.sectionTitle}>Real-time Visualization</Text>
-        </View>
-        
-        {/* Graph Tabs */}
-        <View style={localStyles.tabContainer}>
-          <TouchableOpacity
-            style={[
-              localStyles.tabButton,
-              activeTab === "Resistivity" && localStyles.activeTab
-            ]}
-            onPress={() => setActiveTab("Resistivity")}
-          >
-            <Text style={[
-              localStyles.tabText,
-              activeTab === "Resistivity" && localStyles.activeTabText
-            ]}>
-              Resistivity
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              localStyles.tabButton,
-              activeTab === "TDIP" && localStyles.activeTab
-            ]}
-            onPress={() => setActiveTab("TDIP")}
-          >
-            <Text style={[
-              localStyles.tabText,
-              activeTab === "TDIP" && localStyles.activeTabText
-            ]}>
-              TD/IP
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Graph Container */}
-        <View ref={graphRef} style={localStyles.graphWrapper}>
-          {activeTab === "Resistivity" ? (
-            <VESGraph
-              data={resistivityData}
-              title={`Resistivity - VES${currentVES}`}
-              color={primaryColor}
-              width={graphWidth}
-              height={graphHeight}
-            />
-          ) : (
-            <VESGraph
-              data={tdipData}
-              title={`TD/IP - VES${currentVES}`}
-              color={accentColor}
-              width={graphWidth}
-              height={graphHeight}
-            />
-          )}
-        </View>
-        
-        {/* Graph Actions */}
-        <TouchableOpacity
-          style={localStyles.downloadButton}
-          onPress={captureGraph}
+      {/* Responsive layout container */}
+      <View style={responsiveLayout ? localStyles.responsiveContainer : null}>
+        {/* Data Table */}
+        <Animatable.View
+          animation="fadeInUp"
+          delay={300}
+          style={[
+            localStyles.dataCard,
+            responsiveLayout ? { flex: 1, marginRight: 10 } : null
+          ]}
         >
-          <Ionicons name="download-outline" size={20} color="white" />
-          <Text style={localStyles.downloadButtonText}>
-            DOWNLOAD {activeTab.toUpperCase()} GRAPH
+          <View style={localStyles.sectionHeader}>
+            <Ionicons name="grid-outline" size={24} color={accentColor} />
+            <Text style={localStyles.sectionTitle}>Resistivity/IP Data</Text>
+          </View>
+
+          {renderDataTable()}
+
+          <Text style={localStyles.tableNote}>
+            Press "Next" after entering TDIP to automatically move to the next row
           </Text>
-        </TouchableOpacity>
-      </Animatable.View>
+        </Animatable.View>
+
+        {/* Graph Section */}
+        <Animatable.View
+          animation="fadeInUp"
+          delay={500}
+          style={[
+            localStyles.graphCard,
+            responsiveLayout ? { flex: 1 } : null
+          ]}
+        >
+          <View style={localStyles.sectionHeader}>
+            <Ionicons name="analytics-outline" size={24} color={accentColor} />
+            <Text style={localStyles.sectionTitle}>Real-time Visualization</Text>
+          </View>
+          
+          {/* Graph Tabs */}
+          <View style={localStyles.tabContainer}>
+            <TouchableOpacity
+              style={[
+                localStyles.tabButton,
+                activeTab === "Resistivity" && localStyles.activeTab
+              ]}
+              onPress={() => setActiveTab("Resistivity")}
+            >
+              <Text style={[
+                localStyles.tabText,
+                activeTab === "Resistivity" && localStyles.activeTabText
+              ]}>
+                Resistivity
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                localStyles.tabButton,
+                activeTab === "TDIP" && localStyles.activeTab
+              ]}
+              onPress={() => setActiveTab("TDIP")}
+            >
+              <Text style={[
+                localStyles.tabText,
+                activeTab === "TDIP" && localStyles.activeTabText
+              ]}>
+                TD/IP
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Graph Container */}
+          <View ref={graphRef} style={localStyles.graphWrapper}>
+            {activeTab === "Resistivity" ? (
+              <VESGraph
+                data={resistivityData}
+                title={`Resistivity - VES${currentVES}`}
+                color={primaryColor}
+                width={graphWidth}
+                height={graphHeight}
+              />
+            ) : (
+              <VESGraph
+                data={tdipData}
+                title={`TD/IP - VES${currentVES}`}
+                color={accentColor}
+                width={graphWidth}
+                height={graphHeight}
+              />
+            )}
+          </View>
+          
+          {/* Graph Actions */}
+          <TouchableOpacity
+            style={localStyles.downloadButton}
+            onPress={captureGraph}
+          >
+            <Ionicons name="download-outline" size={20} color="white" />
+            <Text style={localStyles.downloadButtonText}>
+              DOWNLOAD {activeTab.toUpperCase()} GRAPH
+            </Text>
+          </TouchableOpacity>
+        </Animatable.View>
+      </View>
 
       {/* Action Buttons */}
       <View style={localStyles.actionContainer}>
@@ -888,11 +952,15 @@ const localStyles = StyleSheet.create({
     marginTop: 10,
     fontStyle: "italic",
   },
+  responsiveContainer: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
   dataCard: {
     backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
-    marginHorizontal: 20,
     marginBottom: 20,
     elevation: 4,
     shadowColor: "#000",
@@ -904,7 +972,6 @@ const localStyles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
-    marginHorizontal: 20,
     marginBottom: 20,
     elevation: 4,
     shadowColor: "#000",
@@ -929,7 +996,7 @@ const localStyles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginTop: 10,
-    maxHeight: height * 0.4,
+    maxHeight: 400,
   },
   tableRow: {
     flexDirection: "row",

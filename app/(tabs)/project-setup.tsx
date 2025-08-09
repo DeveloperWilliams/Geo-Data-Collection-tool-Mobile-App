@@ -68,12 +68,36 @@ const ProjectSetupScreen = () => {
     }
   };
 
-  const handleLocationChange = (field, value) => {
-    setLocationInfo((prev) => ({ ...prev, [field]: value }));
+  interface LocationInfo {
+    village: string;
+    sublocation: string;
+    location: string;
+    ward: string;
+    subCounty: string;
+    county: string;
+  }
+
+  interface SurveyData {
+    surveyType: string;
+    arrayType: string;
+    operator: string;
+  }
+
+  const handleLocationChange = (field: keyof LocationInfo, value: string) => {
+    setLocationInfo((prev: LocationInfo) => ({ ...prev, [field]: value }));
   };
 
-  const handleSurveyChange = (field, value) => {
-    setSurveyData((prev) => ({ ...prev, [field]: value }));
+  interface SurveyChangeField {
+    surveyType: string;
+    arrayType: string;
+    operator: string;
+  }
+
+  const handleSurveyChange = <K extends keyof SurveyChangeField>(
+    field: K,
+    value: SurveyChangeField[K]
+  ) => {
+    setSurveyData((prev: SurveyData) => ({ ...prev, [field]: value }));
   };
 
   const renderLocationFields = () => {
@@ -96,13 +120,14 @@ const ProjectSetupScreen = () => {
             key={index}
           >
             <View style={localStyles.paramLabelContainer}>
+              {/* @ts-ignore */}
               <Ionicons name={item.icon} size={18} color={secondaryColor} />
               <Text style={localStyles.label}>{item.label} *</Text>
             </View>
             <TextInput
               style={localStyles.input}
-              value={locationInfo[item.field]}
-              onChangeText={(t) => handleLocationChange(item.field, t)}
+              value={locationInfo[item.field as keyof typeof locationInfo]}
+              onChangeText={(t) => handleLocationChange(item.field as keyof typeof locationInfo, t)}
               placeholder={`Enter ${item.label.toLowerCase()}`}
               placeholderTextColor="#94A3B8"
             />
