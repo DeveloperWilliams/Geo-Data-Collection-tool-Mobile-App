@@ -245,6 +245,8 @@ const DataEntryScreen = () => {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("Resistivity");
+  const [azimuth, setAzimuth] = useState("");
+  const [description, setDescription] = useState("");
   const [projectData, setProjectData] = useState({
     id: Date.now().toString(),
     name: params.projectName || "New Project",
@@ -451,6 +453,8 @@ const DataEntryScreen = () => {
     id: number;
     date: string;
     location: Location.LocationObjectCoords | null;
+    azimuth: string;
+    description: string;
     readings: VESReading[];
   }
 
@@ -489,6 +493,13 @@ const DataEntryScreen = () => {
     setIsSaving(true);
 
     try {
+      // Validate mandatory fields
+      if (!azimuth.trim() || !description.trim()) {
+        Alert.alert("Missing Information", "Azimuth and Description are required fields");
+        setIsSaving(false);
+        return;
+      }
+
       // Get current location for this VES
       let location = null;
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -502,6 +513,8 @@ const DataEntryScreen = () => {
         id: currentVES,
         date: now.toISOString(),
         location,
+        azimuth,
+        description,
         readings: readings.map((r) => ({
           ab2: r.ab2,
           mn2: r.mn2,
@@ -537,6 +550,10 @@ const DataEntryScreen = () => {
         prev.map((r) => ({ ...r, resistivity: "", tdip: "" }))
       );
       
+      // Reset mandatory fields
+      setAzimuth("");
+      setDescription("");
+      
       // Scroll to top of table
       setTimeout(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -557,6 +574,13 @@ const DataEntryScreen = () => {
 
   // Confirm save current VES
   const confirmSaveVES = () => {
+    // Check if mandatory fields are filled
+    if (!azimuth.trim() || !description.trim()) {
+      Alert.alert("Missing Information", "Azimuth and Description are required fields");
+      return;
+    }
+
+    // Check if there's any data to save
     const hasData = readings.some(r => r.resistivity || r.tdip);
     
     if (!hasData) {
@@ -579,9 +603,9 @@ const DataEntryScreen = () => {
     setIsSaving(true);
 
     try {
-      // Save current VES if data exists
+      // Save current VES if data exists and mandatory fields are filled
       const hasData = readings.some((r) => r.resistivity || r.tdip);
-      if (hasData) {
+      if (hasData && azimuth.trim() && description.trim()) {
         await saveCurrentVES();
       }
 
@@ -672,6 +696,7 @@ const DataEntryScreen = () => {
         style={localStyles.tableBody}
         contentContainerStyle={{ paddingBottom: 20 }}
         ref={scrollRef}
+        showsVerticalScrollIndicator={true}
       >
         {readings.map((row, rowIndex) => (
           <View key={row.id} style={localStyles.tableRow}>
@@ -783,8 +808,8 @@ const DataEntryScreen = () => {
           <View>
             <Text style={localStyles.projectName}>{projectData.name}</Text>
             <Text style={localStyles.projectLocation}>
-              {projectData.locationInfo.village},{" "}
-              {projectData.locationInfo.county}
+              {projectData.locationInfo.village || "No location"}, 
+              {projectData.locationInfo.county ? ` ${projectData.locationInfo.county}` : ""}
             </Text>
           </View>
         </View>
@@ -809,10 +834,41 @@ const DataEntryScreen = () => {
             >
               VES{currentVES}
             </Text>
-            {/* Data Entry for Asmoth(Degrees) only numeric keyboard
-              then below it
-              Description of the VES an alphanumeric keyboard we can use for site description - its name site description - they will all b mandatory
-            */}
+          </View>
+        </View>
+        
+        {/* Azimuth and Description Fields */}
+        <View style={localStyles.mandatoryFieldsContainer}>
+          <View style={localStyles.fieldRow}>
+            <Ionicons name="compass-outline" size={20} color={secondaryColor} />
+            <Text style={localStyles.fieldLabel}>Azimuth (Degree) *</Text>
+            <TextInput
+              style={localStyles.fieldInput}
+              value={azimuth}
+              onChangeText={setAzimuth}
+              placeholder="Enter azimuth"
+              placeholderTextColor="#94A3B8"
+              keyboardType="numeric"
+              returnKeyType="next"
+              onSubmitEditing={() => {
+                // Focus description field when done
+                viewRef.current?.scrollToEnd();
+              }}
+            />
+          </View>
+          
+          <View style={localStyles.fieldRow}>
+            <Ionicons name="document-text-outline" size={20} color={secondaryColor} />
+            <Text style={localStyles.fieldLabel}>Description *</Text>
+            <TextInput
+              style={[localStyles.fieldInput, { height: 70 }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Enter site description"
+              placeholderTextColor="#94A3B8"
+              multiline
+              returnKeyType="done"
+            />
           </View>
         </View>
 
@@ -1041,6 +1097,36 @@ const localStyles = StyleSheet.create({
     color: "#475569",
     marginLeft: 5,
     flex: 1,
+  },
+  mandatoryFieldsContainer: {
+    marginTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    paddingTop: 15,
+  },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  fieldLabel: {
+    fontFamily: "JosefinSans_600SemiBold",
+    fontSize: 14,
+    color: "#334155",
+    marginLeft: 8,
+    width: 140,
+  },
+  fieldInput: {
+    flex: 1,
+    fontFamily: "JosefinSans_400Regular",
+    fontSize: 14,
+    color: "#0F172A",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    padding: 12,
+    minHeight: 45,
   },
   locationNote: {
     fontFamily: "JosefinSans_400Regular",

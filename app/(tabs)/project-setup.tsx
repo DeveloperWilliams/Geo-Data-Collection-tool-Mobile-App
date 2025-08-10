@@ -16,7 +16,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import * as Animatable from "react-native-animatable";
-import Svg, { Circle, G, Path, Rect } from "react-native-svg";
 
 const primaryColor = "#2C6BED";
 const secondaryColor = "#1A56DB";
@@ -40,14 +39,13 @@ const ProjectSetupScreen = () => {
   });
   const [surveyData, setSurveyData] = useState({
     surveyType: "",
-    arrayType: "Schlumberger", // Set Schlumberger as default
+    arrayType: "Schlumberger",
     operator: "",
   });
 
   const handleStartSurvey = () => {
     setIsLoading(true);
     
-    // Only require project name, survey type, and operator
     if (projectName.trim() !== "" && surveyData.surveyType !== "" && surveyData.operator.trim() !== "") {
       router.push({
         pathname: "/data-entry",
@@ -132,25 +130,6 @@ const ProjectSetupScreen = () => {
     );
   };
 
-  const ProjectSetupIllustration = () => (
-    <Svg width={80} height={80} viewBox="0 0 64 64">
-      <G fill={primaryColor}>
-        <Rect x="10" y="10" width="44" height="44" rx="4" fill="#A4CAFE" />
-        <Rect x="14" y="14" width="36" height="36" rx="2" fill="white" />
-        <Circle cx="32" cy="28" r="6" fill={accentColor} />
-        <Rect x="24" y="38" width="16" height="4" rx="2" fill={secondaryColor} />
-        <Rect x="20" y="46" width="24" height="4" rx="2" fill={secondaryColor} />
-      </G>
-      <G fill={primaryColor}>
-        <Path
-          d="M54,10 L54,6 L58,6 L58,10 L54,10 Z M50,14 L50,10 L54,10 L54,14 L50,14 Z"
-          fill={accentColor}
-        />
-        <Path d="M58,14 L54,14 L54,18 L58,18 L58,14 Z" fill="#0E9F6E" />
-      </G>
-    </Svg>
-  );
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -160,20 +139,8 @@ const ProjectSetupScreen = () => {
         contentContainerStyle={localStyles.container}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Solid Blue Header */}
         <View style={localStyles.header}>
-          <Svg
-            height="100%"
-            width="100%"
-            viewBox="0 0 1440 320"
-            style={localStyles.headerWave}
-          >
-            <Path
-              fill={primaryColor}
-              fillOpacity="1"
-              d="M0,192L48,197.3C96,203,192,213,288,229.3C384,245,480,267,576,261.3C672,256,768,224,864,218.7C960,213,1056,235,1152,234.7C1248,235,1344,213,1392,202.7L1440,192L1440,0L1392,0C1344,0,1248,0,1152,0C1056,0,960,0,864,0C768,0,672,0,576,0C480,0,384,0,288,0C192,0,96,0,48,0L0,0Z"
-            ></Path>
-          </Svg>
-          
           <View style={localStyles.headerContent}>
             <TouchableOpacity
               onPress={() => router.back()}
@@ -349,54 +316,10 @@ const ProjectSetupScreen = () => {
             )}
           </TouchableOpacity>
         </Animatable.View>
-
-        <Svg
-          width="100%"
-          height={80}
-          viewBox="0 0 1440 140"
-          style={localStyles.wave}
-        >
-          <Path
-            fill={primaryColor}
-            fillOpacity="0.1"
-            d="M0,64L80,74.7C160,85,320,107,480,101.3C640,96,800,64,960,53.3C1120,43,1280,53,1360,58.7L1440,64L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z"
-          ></Path>
-        </Svg>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
-
-const pickerSelectStyles = StyleSheet.create({
-  inputIOS: {
-    fontSize: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    paddingRight: 40,
-    fontFamily: 'JosefinSans_400Regular',
-  },
-  inputAndroid: {
-    fontSize: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    paddingRight: 40,
-    fontFamily: 'JosefinSans_400Regular',
-  },
-  iconContainer: {
-    top: 18,
-    right: 16,
-  },
-});
 
 const localStyles = StyleSheet.create({
   container: {
@@ -405,14 +328,8 @@ const localStyles = StyleSheet.create({
     paddingBottom: 20,
   },
   header: {
-    height: 180,
-    marginBottom: 20,
-  },
-  headerWave: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
+    backgroundColor: primaryColor,
+    paddingBottom: 20,
   },
   headerContent: {
     flexDirection: "row",
@@ -431,22 +348,18 @@ const localStyles = StyleSheet.create({
     fontSize: 24,
     color: "white",
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   card: {
     backgroundColor: "white",
     borderRadius: 20,
     padding: 25,
     marginHorizontal: 20,
-    marginTop: -40,
+    marginTop: 10,
     elevation: 12,
     shadowColor: primaryColor,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
-    zIndex: 10,
   },
   inputGroup: {
     marginBottom: 25,
@@ -519,13 +432,6 @@ const localStyles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  pickerContainer: {
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
   primaryButton: {
     backgroundColor: primaryColor,
     borderRadius: 16,
@@ -571,13 +477,6 @@ const localStyles = StyleSheet.create({
     fontFamily: "JosefinSans_500Medium",
     fontSize: 15,
     color: "#475569",
-  },
-  wave: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
   },
 });
 

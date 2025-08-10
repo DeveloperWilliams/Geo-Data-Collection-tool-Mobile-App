@@ -1,10 +1,9 @@
-// app/view-project.jsx
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +17,6 @@ import {
 import * as Animatable from "react-native-animatable";
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import * as XLSX from 'xlsx';
-import { useState } from "react";
 
 const primaryColor = "#2C6BED";
 const secondaryColor = "#1A56DB";
@@ -59,8 +57,8 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
   const yMax = Math.max(...yValues) * 1.1; // Add 10% padding
 
   // Scale functions
-const scaleX = (x: number): number => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
-const scaleY = (y: number): number => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
+  const scaleX = (x: number): number => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
+  const scaleY = (y: number): number => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
 
   // Generate axis labels
   const xAxisLabels = [];
@@ -226,6 +224,8 @@ type VESPoint = {
   id: number;
   date: string;
   location?: { latitude: number; longitude: number };
+  azimuth?: string;
+  description?: string;
   readings: VESReading[];
 };
 
@@ -252,15 +252,10 @@ const ViewProjectScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
-  // @ts-ignore
   const [currentVESIndex, setCurrentVESIndex] = useState(0);
-  // @ts-ignore
   const [isLoading, setIsLoading] = useState(true);
-    // @ts-ignore
   const [isExporting, setIsExporting] = useState(false);
-  // @ts-ignore
   const [graphWidth, setGraphWidth] = useState(width - 40);
-    // @ts-ignore
   const [graphHeight, setGraphHeight] = useState(300);
 
   // Key for AsyncStorage
@@ -272,7 +267,6 @@ const ViewProjectScreen = () => {
       try {
         const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
         const projects = existingProjects ? JSON.parse(existingProjects) : [];
-        // @ts-ignore
         const project = projects.find(p => p.id === params.projectId);
         
         if (project) {
@@ -324,7 +318,6 @@ const ViewProjectScreen = () => {
 
   // Navigate to next/previous VES
   const handleNextVES = () => {
-    // @ts-ignore
     if (currentVESIndex < projectData.vesPoints.length - 1) {
       setCurrentVESIndex(currentVESIndex + 1);
     }
@@ -341,7 +334,6 @@ const ViewProjectScreen = () => {
     if (!projectData) return;
     
     const nextVESId = projectData.vesPoints.length > 0 
-    // @ts-ignore
       ? Math.max(...projectData.vesPoints.map(v => v.id)) + 1 
       : 1;
     
@@ -356,85 +348,58 @@ const ViewProjectScreen = () => {
   };
 
   // Prepare graph data
-interface GraphDataPoint {
-    x: number;
-    y: number;
-}
-
-interface GraphData {
-    resistivityData: GraphDataPoint[];
-    tdipData: GraphDataPoint[];
-}
-
-const getGraphData = (ves: VESPoint | undefined): GraphData => {
+  const getGraphData = (ves) => {
     if (!ves) return { resistivityData: [], tdipData: [] };
 
-    const resistivityData: GraphDataPoint[] = [];
-    const tdipData: GraphDataPoint[] = [];
+    const resistivityData: { x: number; y: number }[] = [];
+    const tdipData = [];
 
-    ves.readings.forEach((reading: VESReading) => {
-        if (reading.resistivity) {
-            resistivityData.push({
-                x: reading.ab2,
-                y: parseFloat(reading.resistivity as string) || 0
-            });
-        }
+    ves.readings.forEach((reading) => {
+      if (reading.resistivity) {
+        resistivityData.push({
+          x: reading.ab2,
+          y: parseFloat(reading.resistivity) || 0
+        });
+      }
 
-        if (reading.tdip) {
-            tdipData.push({
-                x: reading.ab2,
-                y: parseFloat(reading.tdip as string) || 0
-            });
-        }
+      if (reading.tdip) {
+        tdipData.push({
+          x: reading.ab2,
+          y: parseFloat(reading.tdip) || 0
+        });
+      }
     });
 
     return { resistivityData, tdipData };
-};
+  };
 
   // Format date for display
-interface FormatDate {
-    (dateString: string): string;
-}
-
-const formatDate: FormatDate = (dateString) => {
+  const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
-};
+  };
 
   // Format time for display
-interface FormatTime {
-    (dateString: string): string;
-}
-
-const formatTime: FormatTime = (dateString) => {
+  const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
     });
-};
+  };
 
   // Format location coordinates
-interface Location {
-    latitude: number;
-    longitude: number;
-}
-
-interface FormatLocation {
-    (location?: Location): string;
-}
-
-const formatLocation: FormatLocation = (location) => {
+  const formatLocation = (location) => {
     if (!location) return "Not captured";
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-};
+  };
 
-  // Export project to Excel
+  // Export project to Excel with improved quality
   const exportToExcel = async () => {
     if (!projectData) return;
     
@@ -444,8 +409,10 @@ const formatLocation: FormatLocation = (location) => {
       // Create workbook
       const workbook = XLSX.utils.book_new();
       
-      // Add project info sheet
+      // Add project info sheet with formatting
       const projectInfo = [
+        [{ v: "Project Details", s: { font: { bold: true, sz: 16 } } }],
+        [],
         ["Project Name", projectData.name],
         ["Created", new Date(projectData.id).toLocaleString()],
         ["Village", projectData.locationInfo.village],
@@ -462,47 +429,43 @@ const formatLocation: FormatLocation = (location) => {
       const projectSheet = XLSX.utils.aoa_to_sheet(projectInfo);
       XLSX.utils.book_append_sheet(workbook, projectSheet, "Project Info");
       
-      // Add VES sheets
-    interface VESExportReading {
-        ab2: number;
-        mn2: number;
-        mn: number;
-        k: number;
-        resistivity?: number | string;
-        tdip?: number | string;
-    }
-
-    interface VESExportPoint {
-        id: number;
-        date: string;
-        location?: { latitude: number; longitude: number };
-        readings: VESExportReading[];
-    }
-
-    projectData.vesPoints.forEach((ves: VESExportPoint, index: number) => {
-        const vesData: (string | number | undefined)[][] = [
-            ["VES Point", `VES${ves.id}`],
-            ["Date", formatDate(ves.date)],
-            ["Time", formatTime(ves.date)],
-            ["Location", formatLocation(ves.location)],
-            [],
-            ["AB/2 (m)", "MN/2 (m)", "M.N (m)", "K", "Resistivity (Ω·m)", "TDIP"]
+      // Add VES sheets with formatting
+      projectData.vesPoints.forEach((ves, index) => {
+        const vesData = [
+          [{ v: `VES Point: VES${ves.id}`, s: { font: { bold: true, sz: 14 } } }],
+          ["Date", formatDate(ves.date)],
+          ["Time", formatTime(ves.date)],
+          ["Location", formatLocation(ves.location)],
+          ["Azimuth (Degree)", ves.azimuth || "Not specified"],
+          ["Description", ves.description || "Not specified"],
+          [],
+          [{ v: "AB/2 (m)", s: { font: { bold: true } } }, 
+            { v: "MN/2 (m)", s: { font: { bold: true } } }, 
+            { v: "M.N (m)", s: { font: { bold: true } } }, 
+            { v: "K", s: { font: { bold: true } } }, 
+            { v: "Resistivity (Ω·m)", s: { font: { bold: true } } }, 
+            { v: "TDIP", s: { font: { bold: true } } }]
         ];
         
-        ves.readings.forEach((reading: VESExportReading) => {
-            vesData.push([
-                reading.ab2,
-                reading.mn2,
-                reading.mn,
-                reading.k,
-                reading.resistivity,
-                reading.tdip
-            ]);
+        ves.readings.forEach((reading) => {
+          vesData.push([
+            reading.ab2?.toString() ?? "",
+            reading.mn2?.toString() ?? "",
+            reading.mn?.toString() ?? "",
+            reading.k?.toString() ?? "",
+            reading.resistivity?.toString() ?? "",
+            reading.tdip?.toString() ?? ""
+          ]);
         });
         
-        const vesSheet: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(vesData);
+        const vesSheet = XLSX.utils.aoa_to_sheet(vesData);
+        // Add auto-filter and column widths for better quality
+        vesSheet['!autofilter'] = { ref: "A1:F1" };
+        vesSheet['!cols'] = [
+          { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 20 }, { wch: 15 }
+        ];
         XLSX.utils.book_append_sheet(workbook, vesSheet, `VES${ves.id}`);
-    });
+      });
       
       // Write file
       const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
@@ -622,7 +585,7 @@ const formatLocation: FormatLocation = (location) => {
         </View>
       </Animatable.View>
 
-      {/* VES Navigation */}
+      {/* VES Navigation with improved UI */}
       <Animatable.View
         animation="fadeInUp"
         delay={300}
@@ -644,9 +607,24 @@ const formatLocation: FormatLocation = (location) => {
           <Text style={localStyles.vesDate}>
             {formatDate(currentVES.date)} at {formatTime(currentVES.date)}
           </Text>
-          <Text style={localStyles.vesLocation}>
-            Location: {formatLocation(currentVES.location)}
-          </Text>
+          <View style={localStyles.vesDetailRow}>
+            <Ionicons name="location-outline" size={16} color="#64748B" />
+            <Text style={localStyles.vesLocation}>
+              Location: {formatLocation(currentVES.location)}
+            </Text>
+          </View>
+          <View style={localStyles.vesDetailRow}>
+            <Ionicons name="compass-outline" size={16} color="#64748B" />
+            <Text style={localStyles.vesAzimuth}>
+              Azimuth: {currentVES.azimuth || "Not specified"}
+            </Text>
+          </View>
+          <View style={localStyles.vesDetailRow}>
+            <Ionicons name="document-text-outline" size={16} color="#64748B" />
+            <Text style={localStyles.vesDescription}>
+              Description: {currentVES.description || "Not specified"}
+            </Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -689,15 +667,8 @@ const formatLocation: FormatLocation = (location) => {
           <ScrollView style={localStyles.tableBody}>
             {currentVES.readings?.map(
               (
-                reading: {
-                  ab2: number;
-                  mn2: number;
-                  mn: number;
-                  k: number;
-                  resistivity?: number | string;
-                  tdip?: number | string;
-                },
-                index: number
+                reading,
+                index
               ) => (
                 <View key={index} style={localStyles.tableRow}>
                   <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
@@ -917,7 +888,7 @@ const localStyles = StyleSheet.create({
     alignItems: "center",
   },
   vesInfo: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flex: 1,
     paddingHorizontal: 10,
   },
@@ -931,12 +902,28 @@ const localStyles = StyleSheet.create({
     fontSize: 14,
     color: "#64748B",
   },
+  vesDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+  },
   vesLocation: {
     fontFamily: "JosefinSans_400Regular",
     fontSize: 12,
     color: "#94A3B8",
-    marginTop: 5,
-    textAlign: "center",
+    marginLeft: 5,
+  },
+  vesAzimuth: {
+    fontFamily: "JosefinSans_400Regular",
+    fontSize: 12,
+    color: "#94A3B8",
+    marginLeft: 5,
+  },
+  vesDescription: {
+    fontFamily: "JosefinSans_400Regular",
+    fontSize: 12,
+    color: "#94A3B8",
+    marginLeft: 5,
   },
   dataCard: {
     backgroundColor: "white",
@@ -1063,4 +1050,3 @@ const localStyles = StyleSheet.create({
 });
 
 export default ViewProjectScreen;
-
