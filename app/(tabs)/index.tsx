@@ -29,6 +29,12 @@ export default function HomeScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
+        {/* Displaying the app name and subtitle */
+          /*
+           Logo on the left, beside it GeoTruth Consult under GeoTruth Consult catch phrase Groundwater is our metier on the right hand side 
+           RES-IP Datalog
+          */
+        }
         <Text style={styles.appTitle}>GeoTruth Consult</Text>
         <Text style={styles.appSubtitle}>
           Professional Geotechnical Data Collection
@@ -53,13 +59,13 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.cardTitle}>New Survey</Text>
               <Text style={styles.cardDescription}>
-                Create a new geotechnical survey project
+                Start a new survey project
               </Text>
             </LinearGradient>
           </TouchableOpacity>
         </Link>
 
-        <Link href="/view-data" asChild>
+        <Link href="/list-project" asChild>
           <TouchableOpacity style={styles.card}>
             <LinearGradient
               colors={[secondaryColor, primaryColor]}
@@ -85,7 +91,12 @@ export default function HomeScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          v1.0.0 • Lambda Geotechnical Solutions
+          GeoTruth Consult © 2025 |{" "}
+          <Text>| All rights reserved</Text> 
+        </Text>
+        <Text style={styles.footerText}>
+          {/*  Link to geotruthconsult.org */}
+          <Text style={{ color: primaryColor }}>geotruthconsult.org</Text>
         </Text>
       </View>
     </SafeAreaView>

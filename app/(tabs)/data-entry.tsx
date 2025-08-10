@@ -41,7 +41,15 @@ const MN2_VALUES = [
 const PROJECTS_STORAGE_KEY = "VES_PROJECTS";
 
 // Graph component
-const VESGraph = ({ data, title, color, width, height }) => {
+type VESGraphProps = {
+  data: { x: number; y: number }[];
+  title: string;
+  color: string;
+  width: number;
+  height: number;
+};
+
+const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }) => {
   if (!data || data.length === 0) {
     return (
       <View style={[localStyles.graphContainer, { width, height }]}>
@@ -64,8 +72,15 @@ const VESGraph = ({ data, title, color, width, height }) => {
   const yMax = Math.max(...yValues) * 1.1; // Add 10% padding
 
   // Scale functions
-  const scaleX = (x) => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
-  const scaleY = (y) => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
+  interface ScaleX {
+    (x: number): number;
+  }
+  const scaleX: ScaleX = (x: number): number => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
+  interface ScaleY {
+    (y: number): number;
+  }
+  const scaleY: ScaleY = (y: number): number =>
+    padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
 
   // Generate axis labels
   const xAxisLabels = [];
@@ -222,12 +237,12 @@ const VESGraph = ({ data, title, color, width, height }) => {
 const DataEntryScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const viewRef = useRef();
-  const graphRef = useRef();
-  const scrollRef = useRef();
+  const viewRef = useRef<ScrollView>(null);
+  const graphRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [currentVES, setCurrentVES] = useState(1);
-  const [readings, setReadings] = useState([]);
+  const [readings, setReadings] = useState<Reading[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("Resistivity");
   const [projectData, setProjectData] = useState({
@@ -250,10 +265,14 @@ const DataEntryScreen = () => {
   });
 
   // Calculate K factor
-  const calculateK = (ab2, mn2) => {
+  interface CalculateK {
+    (ab2: number | string, mn2: number | string): string;
+  }
+
+  const calculateK: CalculateK = (ab2, mn2) => {
     if (!ab2 || !mn2) return "";
-    const ab2Num = parseFloat(ab2);
-    const mn2Num = parseFloat(mn2);
+    const ab2Num = parseFloat(ab2 as string);
+    const mn2Num = parseFloat(mn2 as string);
     
     if (isNaN(ab2Num)) return "";
     if (isNaN(mn2Num)) return "";
@@ -281,6 +300,7 @@ const DataEntryScreen = () => {
         tdipRef: React.createRef(),
       };
     });
+    // @ts-ignore
     setReadings(initialReadings);
 
     // Set up date/time updater
@@ -294,11 +314,13 @@ const DataEntryScreen = () => {
         try {
           const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
           const projects = existingProjects ? JSON.parse(existingProjects) : [];
+          // @ts-ignore
           const project = projects.find(p => p.id === params.projectId);
           
           if (project) {
             setProjectData(project);
             if (project.vesPoints.length > 0) {
+              // @ts-ignore
               const maxId = Math.max(...project.vesPoints.map(v => v.id));
               setCurrentVES(maxId + 1);
             }
@@ -315,7 +337,11 @@ const DataEntryScreen = () => {
   }, []);
 
   // Format date for display
-  const formatDate = (date) => {
+  interface FormatDate {
+    (date: Date): string;
+  }
+
+  const formatDate: FormatDate = (date) => {
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -324,7 +350,11 @@ const DataEntryScreen = () => {
   };
 
   // Format time for display
-  const formatTime = (date) => {
+  interface FormatTime {
+    (date: Date): string;
+  }
+
+  const formatTime: FormatTime = (date) => {
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -333,11 +363,29 @@ const DataEntryScreen = () => {
   };
 
   // Handle input change
-  const handleInputChange = (index, field, value) => {
-    setReadings((prev) => {
+  interface Reading {
+    id: number;
+    ab2: number;
+    mn2: number;
+    k: string;
+    resistivity: string;
+    tdip: string;
+    resistivityRef: React.RefObject<TextInput>;
+    tdipRef: React.RefObject<TextInput>;
+  }
+
+  type ReadingField = "ab2" | "mn2" | "k" | "resistivity" | "tdip";
+
+  const handleInputChange = (
+    index: number,
+    field: ReadingField,
+    value: string
+  ): void => {
+    setReadings((prev: Reading[]) => {
       const newReadings = [...prev];
+      // @ts-ignore
       newReadings[index][field] = value;
-      
+
       // Recalculate K when AB/2 or MN/2 changes
       if (field === "ab2" || field === "mn2") {
         newReadings[index].k = calculateK(
@@ -345,15 +393,15 @@ const DataEntryScreen = () => {
           field === "mn2" ? value : newReadings[index].mn2
         );
       }
-      
+
       return newReadings;
     });
   };
 
   // Prepare graph data
-  const getGraphData = () => {
-    const resistivityData = [];
-    const tdipData = [];
+  const getGraphData = (): { resistivityData: { x: number; y: number }[]; tdipData: { x: number; y: number }[] } => {
+    const resistivityData: { x: number; y: number }[] = [];
+    const tdipData: { x: number; y: number }[] = [];
     
     readings.forEach((reading) => {
       if (reading.resistivity) {
@@ -375,13 +423,52 @@ const DataEntryScreen = () => {
   };
 
   // Save project data to AsyncStorage
-  const saveProjectToStorage = async (project) => {
+  interface ProjectLocationInfo {
+    village: string;
+    sublocation: string;
+    location: string;
+    ward: string;
+    subCounty: string;
+    county: string;
+  }
+
+  interface ProjectSurveyData {
+    surveyType: string;
+    arrayType: string;
+    operator: string;
+  }
+
+  interface VESReading {
+    ab2: number;
+    mn2: number;
+    mn: number;
+    k: string;
+    resistivity: string;
+    tdip: string;
+  }
+
+  interface VESPoint {
+    id: number;
+    date: string;
+    location: Location.LocationObjectCoords | null;
+    readings: VESReading[];
+  }
+
+  interface ProjectData {
+    id: string;
+    name: string;
+    locationInfo: ProjectLocationInfo;
+    surveyData: ProjectSurveyData;
+    vesPoints: VESPoint[];
+  }
+
+  const saveProjectToStorage = async (project: ProjectData): Promise<boolean> => {
     try {
       const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
-      let projects = existingProjects ? JSON.parse(existingProjects) : [];
+      let projects: ProjectData[] = existingProjects ? JSON.parse(existingProjects) : [];
       
       // Check if project already exists
-      const existingIndex = projects.findIndex(p => p.id === project.id);
+      const existingIndex = projects.findIndex((p: ProjectData) => p.id === project.id);
       
       if (existingIndex !== -1) {
         projects[existingIndex] = project;
@@ -432,12 +519,14 @@ const DataEntryScreen = () => {
       };
       
       // Save to AsyncStorage
+      // @ts-ignore
       const saveResult = await saveProjectToStorage(updatedProject);
       
       if (!saveResult) {
         throw new Error("Failed to save project data");
       }
-      
+
+      // @ts-ignore
       setProjectData(updatedProject);
 
       // Move to next VES
@@ -455,7 +544,11 @@ const DataEntryScreen = () => {
 
       Alert.alert("Success", `VES${currentVES} saved successfully!`);
     } catch (error) {
-      Alert.alert("Save Error", error.message || "Could not save VES data");
+      const errorMessage =
+        typeof error === "object" && error !== null && "message" in error
+          ? (error as { message?: string }).message
+          : "Could not save VES data";
+      Alert.alert("Save Error", errorMessage);
       console.error("Save error:", error);
     } finally {
       setIsSaving(false);
@@ -716,6 +809,10 @@ const DataEntryScreen = () => {
             >
               VES{currentVES}
             </Text>
+            {/* Data Entry for Asmoth(Degrees) only numeric keyboard
+              then below it
+              Description of the VES an alphanumeric keyboard we can use for site description - its name site description - they will all b mandatory
+            */}
           </View>
         </View>
 
@@ -758,7 +855,7 @@ const DataEntryScreen = () => {
         >
           <View style={localStyles.sectionHeader}>
             <Ionicons name="analytics-outline" size={24} color={accentColor} />
-            <Text style={localStyles.sectionTitle}>Real-time Visualization</Text>
+            <Text style={localStyles.sectionTitle}>RES-IP Curve</Text>
           </View>
           
           {/* Graph Tabs */}

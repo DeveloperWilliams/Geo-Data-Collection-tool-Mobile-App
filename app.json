@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "geo-electerical",
-    "slug": "geo-electerical",
+    "name": "RES-IP Datalog",
+    "slug": "Resistivity/IP Datalogger",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "geoelecterical",
+    "scheme": "resistivity-ip-datalogger",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

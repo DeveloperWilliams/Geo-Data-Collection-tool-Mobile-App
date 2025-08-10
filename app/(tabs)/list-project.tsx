@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     RefreshControl,
     StyleSheet,
@@ -22,7 +23,19 @@ const lightBackground = "#F9FAFB";
 
 const ProjectsListScreen = () => {
   const router = useRouter();
-  const [projects, setProjects] = useState([]);
+  interface LocationInfo {
+    village?: string;
+    county?: string;
+  }
+
+  interface Project {
+    id: string;
+    name: string;
+    locationInfo: LocationInfo;
+    vesPoints: any[]; // Replace 'any' with a more specific type if available
+  }
+
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -36,9 +49,21 @@ const ProjectsListScreen = () => {
       const projectsData = existingProjects ? JSON.parse(existingProjects) : [];
       
       // Sort by creation date (newest first)
-      const sortedProjects = projectsData.sort((a, b) => 
-        new Date(b.id) - new Date(a.id)
-      );
+    interface LocationInfo {
+      village?: string;
+      county?: string;
+    }
+
+    interface Project {
+      id: string;
+      name: string;
+      locationInfo: LocationInfo;
+      vesPoints: any[]; // Replace 'any' with a more specific type if available
+    }
+
+    const sortedProjects = (projectsData as Project[]).sort((a, b) => 
+      new Date(b.id).getTime() - new Date(a.id).getTime()
+    );
       
       setProjects(sortedProjects);
     } catch (error) {
@@ -62,22 +87,36 @@ const ProjectsListScreen = () => {
   };
 
   // Format date
-  const formatDate = (timestamp) => {
+interface FormatDate {
+    (timestamp: string): string;
+}
+
+const formatDate: FormatDate = (timestamp) => {
     const date = new Date(parseInt(timestamp));
     return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
     });
-  };
+};
 
   // Navigate to project details
-  const viewProject = (projectId) => {
+interface ViewProjectFn {
+    (projectId: string): void;
+}
+
+const viewProject: ViewProjectFn = (projectId) => {
     router.push(`/view-data?projectId=${projectId}`);
-  };
+};
 
   // Render project item
-  const renderProjectItem = ({ item, index }) => (
+  const renderProjectItem = ({
+    item,
+    index,
+  }: {
+    item: Project;
+    index: number;
+  }) => (
     <Animatable.View
       animation="fadeInUp"
       delay={index * 100}

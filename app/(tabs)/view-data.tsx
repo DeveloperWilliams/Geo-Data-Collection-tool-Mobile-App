@@ -4,20 +4,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import * as Animatable from "react-native-animatable";
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import * as XLSX from 'xlsx';
+import { useState } from "react";
 
 const primaryColor = "#2C6BED";
 const secondaryColor = "#1A56DB";
@@ -26,7 +27,16 @@ const lightBackground = "#F9FAFB";
 const { height, width } = Dimensions.get("window");
 
 // Graph component
-const VESGraph = ({ data, title, color, width, height }) => {
+type VESGraphDataPoint = { x: number; y: number };
+type VESGraphProps = {
+  data: VESGraphDataPoint[];
+  title: string;
+  color: string;
+  width: number;
+  height: number;
+};
+
+const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }) => {
   if (!data || data.length === 0) {
     return (
       <View style={[localStyles.graphContainer, { width, height }]}>
@@ -49,8 +59,8 @@ const VESGraph = ({ data, title, color, width, height }) => {
   const yMax = Math.max(...yValues) * 1.1; // Add 10% padding
 
   // Scale functions
-  const scaleX = (x) => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
-  const scaleY = (y) => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
+const scaleX = (x: number): number => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
+const scaleY = (y: number): number => padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
 
   // Generate axis labels
   const xAxisLabels = [];
@@ -203,14 +213,54 @@ const VESGraph = ({ data, title, color, width, height }) => {
   );
 };
 
+type VESReading = {
+  ab2: number;
+  mn2: number;
+  mn: number;
+  k: number;
+  resistivity?: number | string;
+  tdip?: number | string;
+};
+
+type VESPoint = {
+  id: number;
+  date: string;
+  location?: { latitude: number; longitude: number };
+  readings: VESReading[];
+};
+
+type ProjectData = {
+  id: string;
+  name: string;
+  locationInfo: {
+    village: string;
+    sublocation: string;
+    location: string;
+    ward: string;
+    subCounty: string;
+    county: string;
+  };
+  surveyData: {
+    surveyType: string;
+    arrayType: string;
+    operator: string;
+  };
+  vesPoints: VESPoint[];
+};
+
 const ViewProjectScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [projectData, setProjectData] = useState(null);
+  const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  // @ts-ignore
   const [currentVESIndex, setCurrentVESIndex] = useState(0);
+  // @ts-ignore
   const [isLoading, setIsLoading] = useState(true);
+    // @ts-ignore
   const [isExporting, setIsExporting] = useState(false);
+  // @ts-ignore
   const [graphWidth, setGraphWidth] = useState(width - 40);
+    // @ts-ignore
   const [graphHeight, setGraphHeight] = useState(300);
 
   // Key for AsyncStorage
@@ -222,6 +272,7 @@ const ViewProjectScreen = () => {
       try {
         const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
         const projects = existingProjects ? JSON.parse(existingProjects) : [];
+        // @ts-ignore
         const project = projects.find(p => p.id === params.projectId);
         
         if (project) {
@@ -263,16 +314,17 @@ const ViewProjectScreen = () => {
       }
     };
 
-    Dimensions.addEventListener('change', updateDimensions);
+    const subscription = Dimensions.addEventListener('change', updateDimensions);
     updateDimensions();
     
     return () => {
-      Dimensions.removeEventListener('change', updateDimensions);
+      subscription?.remove();
     };
   }, []);
 
   // Navigate to next/previous VES
   const handleNextVES = () => {
+    // @ts-ignore
     if (currentVESIndex < projectData.vesPoints.length - 1) {
       setCurrentVESIndex(currentVESIndex + 1);
     }
@@ -289,6 +341,7 @@ const ViewProjectScreen = () => {
     if (!projectData) return;
     
     const nextVESId = projectData.vesPoints.length > 0 
+    // @ts-ignore
       ? Math.max(...projectData.vesPoints.map(v => v.id)) + 1 
       : 1;
     
@@ -303,56 +356,83 @@ const ViewProjectScreen = () => {
   };
 
   // Prepare graph data
-  const getGraphData = (ves) => {
+interface GraphDataPoint {
+    x: number;
+    y: number;
+}
+
+interface GraphData {
+    resistivityData: GraphDataPoint[];
+    tdipData: GraphDataPoint[];
+}
+
+const getGraphData = (ves: VESPoint | undefined): GraphData => {
     if (!ves) return { resistivityData: [], tdipData: [] };
-    
-    const resistivityData = [];
-    const tdipData = [];
-    
-    ves.readings.forEach((reading) => {
-      if (reading.resistivity) {
-        resistivityData.push({
-          x: reading.ab2,
-          y: parseFloat(reading.resistivity) || 0
-        });
-      }
-      
-      if (reading.tdip) {
-        tdipData.push({
-          x: reading.ab2,
-          y: parseFloat(reading.tdip) || 0
-        });
-      }
+
+    const resistivityData: GraphDataPoint[] = [];
+    const tdipData: GraphDataPoint[] = [];
+
+    ves.readings.forEach((reading: VESReading) => {
+        if (reading.resistivity) {
+            resistivityData.push({
+                x: reading.ab2,
+                y: parseFloat(reading.resistivity as string) || 0
+            });
+        }
+
+        if (reading.tdip) {
+            tdipData.push({
+                x: reading.ab2,
+                y: parseFloat(reading.tdip as string) || 0
+            });
+        }
     });
-    
+
     return { resistivityData, tdipData };
-  };
+};
 
   // Format date for display
-  const formatDate = (dateString) => {
+interface FormatDate {
+    (dateString: string): string;
+}
+
+const formatDate: FormatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
     });
-  };
+};
 
   // Format time for display
-  const formatTime = (dateString) => {
+interface FormatTime {
+    (dateString: string): string;
+}
+
+const formatTime: FormatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
     });
-  };
+};
 
   // Format location coordinates
-  const formatLocation = (location) => {
+interface Location {
+    latitude: number;
+    longitude: number;
+}
+
+interface FormatLocation {
+    (location?: Location): string;
+}
+
+const formatLocation: FormatLocation = (location) => {
     if (!location) return "Not captured";
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-  };
+};
 
   // Export project to Excel
   const exportToExcel = async () => {
@@ -383,30 +463,46 @@ const ViewProjectScreen = () => {
       XLSX.utils.book_append_sheet(workbook, projectSheet, "Project Info");
       
       // Add VES sheets
-      projectData.vesPoints.forEach((ves, index) => {
-        const vesData = [
-          ["VES Point", `VES${ves.id}`],
-          ["Date", formatDate(ves.date)],
-          ["Time", formatTime(ves.date)],
-          ["Location", formatLocation(ves.location)],
-          [],
-          ["AB/2 (m)", "MN/2 (m)", "M.N (m)", "K", "Resistivity (Ω·m)", "TDIP"]
+    interface VESExportReading {
+        ab2: number;
+        mn2: number;
+        mn: number;
+        k: number;
+        resistivity?: number | string;
+        tdip?: number | string;
+    }
+
+    interface VESExportPoint {
+        id: number;
+        date: string;
+        location?: { latitude: number; longitude: number };
+        readings: VESExportReading[];
+    }
+
+    projectData.vesPoints.forEach((ves: VESExportPoint, index: number) => {
+        const vesData: (string | number | undefined)[][] = [
+            ["VES Point", `VES${ves.id}`],
+            ["Date", formatDate(ves.date)],
+            ["Time", formatTime(ves.date)],
+            ["Location", formatLocation(ves.location)],
+            [],
+            ["AB/2 (m)", "MN/2 (m)", "M.N (m)", "K", "Resistivity (Ω·m)", "TDIP"]
         ];
         
-        ves.readings.forEach(reading => {
-          vesData.push([
-            reading.ab2,
-            reading.mn2,
-            reading.mn,
-            reading.k,
-            reading.resistivity,
-            reading.tdip
-          ]);
+        ves.readings.forEach((reading: VESExportReading) => {
+            vesData.push([
+                reading.ab2,
+                reading.mn2,
+                reading.mn,
+                reading.k,
+                reading.resistivity,
+                reading.tdip
+            ]);
         });
         
-        const vesSheet = XLSX.utils.aoa_to_sheet(vesData);
+        const vesSheet: XLSX.WorkSheet = XLSX.utils.aoa_to_sheet(vesData);
         XLSX.utils.book_append_sheet(workbook, vesSheet, `VES${ves.id}`);
-      });
+    });
       
       // Write file
       const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
@@ -591,28 +687,40 @@ const ViewProjectScreen = () => {
 
           {/* Table Body */}
           <ScrollView style={localStyles.tableBody}>
-            {currentVES.readings?.map((reading, index) => (
-              <View key={index} style={localStyles.tableRow}>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
-                  {reading.ab2}
-                </Text>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
-                  {reading.mn2}
-                </Text>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
-                  {reading.mn}
-                </Text>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1 : 1 }]}>
-                  {reading.k}
-                </Text>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
-                  {reading.resistivity || "-"}
-                </Text>
-                <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
-                  {reading.tdip || "-"}
-                </Text>
-              </View>
-            ))}
+            {currentVES.readings?.map(
+              (
+                reading: {
+                  ab2: number;
+                  mn2: number;
+                  mn: number;
+                  k: number;
+                  resistivity?: number | string;
+                  tdip?: number | string;
+                },
+                index: number
+              ) => (
+                <View key={index} style={localStyles.tableRow}>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
+                    {reading.ab2}
+                  </Text>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
+                    {reading.mn2}
+                  </Text>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7 }]}>
+                    {reading.mn}
+                  </Text>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1 : 1 }]}>
+                    {reading.k}
+                  </Text>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
+                    {reading.resistivity || "-"}
+                  </Text>
+                  <Text style={[localStyles.tableCell, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
+                    {reading.tdip || "-"}
+                  </Text>
+                </View>
+              )
+            )}
           </ScrollView>
         </View>
       </Animatable.View>
@@ -955,3 +1063,4 @@ const localStyles = StyleSheet.create({
 });
 
 export default ViewProjectScreen;
+

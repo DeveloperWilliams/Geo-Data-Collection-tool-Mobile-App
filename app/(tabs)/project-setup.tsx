@@ -40,20 +40,15 @@ const ProjectSetupScreen = () => {
   });
   const [surveyData, setSurveyData] = useState({
     surveyType: "",
-    arrayType: "",
+    arrayType: "Schlumberger", // Set Schlumberger as default
     operator: "",
   });
 
   const handleStartSurvey = () => {
     setIsLoading(true);
     
-    const allLocationFields = Object.values(locationInfo).every(
-      (v) => v.trim() !== ""
-    );
-    const allSurveyFields =
-      surveyData.surveyType !== "" && surveyData.operator !== "";
-
-    if (projectName.trim() !== "" && allLocationFields && allSurveyFields) {
+    // Only require project name, survey type, and operator
+    if (projectName.trim() !== "" && surveyData.surveyType !== "" && surveyData.operator.trim() !== "") {
       router.push({
         pathname: "/data-entry",
         params: {
@@ -63,7 +58,7 @@ const ProjectSetupScreen = () => {
         },
       });
     } else {
-      Alert.alert("Missing Fields", "Please fill all required information");
+      Alert.alert("Missing Fields", "Please fill required information");
       setIsLoading(false);
     }
   };
@@ -122,7 +117,7 @@ const ProjectSetupScreen = () => {
             <View style={localStyles.paramLabelContainer}>
               {/* @ts-ignore */}
               <Ionicons name={item.icon} size={18} color={secondaryColor} />
-              <Text style={localStyles.label}>{item.label} *</Text>
+              <Text style={localStyles.label}>{item.label} </Text>
             </View>
             <TextInput
               style={localStyles.input}
@@ -196,16 +191,6 @@ const ProjectSetupScreen = () => {
           duration={600}
           style={localStyles.card}
         >
-          <View style={localStyles.cardHeader}>
-            <ProjectSetupIllustration />
-            <View style={localStyles.cardTextContainer}>
-              <Text style={localStyles.cardTitle}>Configure New Project</Text>
-              <Text style={localStyles.cardSubtitle}>
-                Enter project details to begin geophysical data collection
-              </Text>
-            </View>
-          </View>
-
           <View style={localStyles.inputGroup}>
             <View style={localStyles.labelContainer}>
               <Ionicons name="folder-outline" size={18} color={secondaryColor} />
@@ -224,8 +209,9 @@ const ProjectSetupScreen = () => {
             <View style={localStyles.sectionIcon}>
               <Ionicons name="location" size={20} color="white" />
             </View>
-            <Text style={localStyles.sectionTitle}>Project Area Location</Text>
+            <Text style={localStyles.sectionTitle}>Project Location</Text>
           </View>
+          <Text style={localStyles.optionalText}>(Optional fields)</Text>
 
           {renderLocationFields()}
 
@@ -233,7 +219,7 @@ const ProjectSetupScreen = () => {
             <View style={localStyles.sectionIcon}>
               <Ionicons name="analytics" size={20} color="white" />
             </View>
-            <Text style={localStyles.sectionTitle}>Survey Data</Text>
+            <Text style={localStyles.sectionTitle}>Survey Setup</Text>
           </View>
 
           <View
@@ -252,20 +238,22 @@ const ProjectSetupScreen = () => {
                 <Text style={localStyles.label}>Survey Type *</Text>
               </View>
               <View style={localStyles.buttonGroup}>
-                {["VES", "Array"].map((type) => (
+                {["VES", "Profile"].map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={[
                       localStyles.typeButton,
-                      surveyData.surveyType === type &&
-                        localStyles.selectedButton,
+                      surveyData.surveyType === type && localStyles.selectedButton,
+                      type !== "VES" && localStyles.disabledButton
                     ]}
-                    onPress={() => handleSurveyChange("surveyType", type)}
+                    onPress={() => type === "VES" && handleSurveyChange("surveyType", type)}
+                    disabled={type !== "VES"}
                   >
                     <Text
                       style={[
                         localStyles.buttonTextSmall,
                         surveyData.surveyType === type && { color: "white" },
+                        type !== "VES" && { color: "#CBD5E1" }
                       ]}
                     >
                       {type}
@@ -275,42 +263,49 @@ const ProjectSetupScreen = () => {
               </View>
             </View>
 
-            {surveyData.surveyType === "Array" && (
-              <View
-                style={[localStyles.paramItem, isTablet && { width: "48%" }]}
-              >
-                <View style={localStyles.paramLabelContainer}>
-                  <Ionicons
-                    name="layers-outline"
-                    size={18}
-                    color={secondaryColor}
-                  />
-                  <Text style={localStyles.label}>Array Type *</Text>
-                </View>
-                <View style={localStyles.buttonGroup}>
-                  {["Schlumberger", "Wenner", "Pole-Dipole"].map((type) => (
-                    <TouchableOpacity
-                      key={type}
-                      style={[
-                        localStyles.typeButton,
-                        surveyData.arrayType === type &&
-                          localStyles.selectedButton,
-                      ]}
-                      onPress={() => handleSurveyChange("arrayType", type)}
-                    >
-                      <Text
-                        style={[
-                          localStyles.buttonTextSmall,
-                          surveyData.arrayType === type && { color: "white" },
-                        ]}
-                      >
-                        {type}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            <View style={[localStyles.paramItem, isTablet && { width: "48%" }]}>
+              <View style={localStyles.paramLabelContainer}>
+                <Ionicons
+                  name="layers-outline"
+                  size={18}
+                  color={secondaryColor}
+                />
+                <Text style={localStyles.label}>Array Type</Text>
               </View>
-            )}
+              <View style={localStyles.buttonGroup}>
+                {[
+                  "Schlumberger",
+                  "Wenner",
+                  "Pole-Dipole",
+                  "Dipole-Dipole",
+                  "Pole-Pole",
+                  "Gradient",
+                  "Square",
+                  "Equatorial",
+                ].map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      localStyles.typeButton,
+                      surveyData.arrayType === type && localStyles.selectedButton,
+                      type !== "Schlumberger" && localStyles.disabledButton
+                    ]}
+                    onPress={() => type === "Schlumberger" && handleSurveyChange("arrayType", type)}
+                    disabled={type !== "Schlumberger"}
+                  >
+                    <Text
+                      style={[
+                        localStyles.buttonTextSmall,
+                        surveyData.arrayType === type && { color: "white" },
+                        type !== "Schlumberger" && { color: "#CBD5E1" }
+                      ]}
+                    >
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
             <View style={[localStyles.paramItem, isTablet && { width: "48%" }]}>
               <View style={localStyles.paramLabelContainer}>
@@ -372,6 +367,37 @@ const ProjectSetupScreen = () => {
   );
 };
 
+const pickerSelectStyles = StyleSheet.create({
+  inputIOS: {
+    fontSize: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    paddingRight: 40,
+    fontFamily: 'JosefinSans_400Regular',
+  },
+  inputAndroid: {
+    fontSize: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    paddingRight: 40,
+    fontFamily: 'JosefinSans_400Regular',
+  },
+  iconContainer: {
+    top: 18,
+    right: 16,
+  },
+});
+
 const localStyles = StyleSheet.create({
   container: {
     flexGrow: 1,
@@ -422,27 +448,6 @@ const localStyles = StyleSheet.create({
     shadowRadius: 24,
     zIndex: 10,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 25,
-  },
-  cardTextContainer: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  cardTitle: {
-    fontFamily: "JosefinSans_700Bold",
-    fontSize: 24,
-    color: primaryColor,
-    marginBottom: 5,
-  },
-  cardSubtitle: {
-    fontFamily: "JosefinSans_400Regular",
-    fontSize: 16,
-    color: "#64748B",
-    lineHeight: 22,
-  },
   inputGroup: {
     marginBottom: 25,
   },
@@ -475,6 +480,14 @@ const localStyles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "#F1F5F9",
   },
+  optionalText: {
+    fontFamily: "JosefinSans_400Regular",
+    fontSize: 14,
+    color: "#64748B",
+    marginLeft: 48,
+    marginTop: -15,
+    marginBottom: 10,
+  },
   sectionIcon: {
     backgroundColor: accentColor,
     width: 36,
@@ -506,6 +519,13 @@ const localStyles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
+  pickerContainer: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
   primaryButton: {
     backgroundColor: primaryColor,
     borderRadius: 16,
@@ -521,7 +541,7 @@ const localStyles = StyleSheet.create({
     shadowRadius: 12,
   },
   disabledButton: {
-    opacity: 0.8,
+    opacity: 0.6,
   },
   buttonText: {
     fontFamily: "JosefinSans_600SemiBold",
