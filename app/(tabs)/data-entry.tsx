@@ -9,16 +9,15 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import * as Animatable from "react-native-animatable";
-import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
+import Svg, { G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 
 const primaryColor = "#2C6BED";
@@ -27,14 +26,24 @@ const accentColor = "#0E9F6E";
 const lightBackground = "#F9FAFB";
 const { height, width } = Dimensions.get("window");
 
-// Predefined AB/2 and M.N values
-const AB2_VALUES = [
-  1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 8.0, 10.0, 13.0, 16.0, 16.0, 20.0, 25.0,
-  32.0, 32.0, 40.0, 50.0, 63.0, 80.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0,
-];
-const MN2_VALUES = [
-  0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 5.0, 5.0, 5.0, 5.0,
-  10.0, 10.0, 10.0, 10.0, 10.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0,
+// To this:
+const READINGS_GROUPS = [
+  {
+    mn2: 0.5,
+    ab2Values: [1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 8.0, 10.0, 13.0, 16.0]
+  },
+  {
+    mn2: 5,
+    ab2Values: [16.0, 20.0, 25.0, 32.0]
+  },
+  {
+    mn2: 10,
+    ab2Values: [32.0, 40.0, 50.0, 63.0]
+  },
+  {
+    mn2: 25,
+    ab2Values: [80.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0]
+  }
 ];
 
 // Key for AsyncStorage
@@ -63,36 +72,44 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
   const chartWidth = width - padding * 2;
   const chartHeight = height - padding * 2;
 
-  // Get min/max values for scaling
+  // Get min/max values from actual data
   const xValues = data.map(d => d.x);
   const yValues = data.map(d => d.y);
-  const xMin = Math.min(...xValues);
-  const xMax = Math.max(...xValues);
-  const yMin = Math.min(0, ...yValues);
-  const yMax = Math.max(...yValues) * 1.1; // Add 10% padding
+  
+  // Calculate min/max with padding
+  const xMin = Math.max(0.1, Math.min(...xValues) * 0.9);
+  const xMax = Math.max(...xValues) * 1.1;
 
-  // Scale functions
-  interface ScaleX {
-    (x: number): number;
+  // For Y-axis, we need to ensure we capture the full range properly
+  let yMin = Math.max(0.1, Math.min(...yValues));
+  let yMax = Math.max(...yValues);
+  
+  // If all values are the same, create some range
+  if (yMin === yMax) {
+    yMin = yMax * 0.5;
+    yMax = yMax * 1.5;
+  } else {
+    // Add 20% padding
+    yMin = yMin * 0.8;
+    yMax = yMax * 1.2;
   }
-  const scaleX: ScaleX = (x: number): number => padding + ((x - xMin) / (xMax - xMin)) * chartWidth;
-  interface ScaleY {
-    (y: number): number;
-  }
-  const scaleY: ScaleY = (y: number): number =>
-    padding + chartHeight - ((y - yMin) / (yMax - yMin)) * chartHeight;
 
-  // Generate axis labels
+  // Ensure we have at least one order of magnitude range
+  const logRange = Math.log10(yMax) - Math.log10(yMin);
+  if (logRange < 1) {
+    const mid = Math.sqrt(yMin * yMax); // Geometric mean
+    yMin = mid / 2;
+    yMax = mid * 2;
+  }
+
+  // Scale functions for logarithmic axes
+  const scaleX = (x: number) => padding + ((Math.log10(x) - Math.log10(xMin)) / (Math.log10(xMax) - Math.log10(xMin))) * chartWidth;
+  const scaleY = (y: number) => padding + chartHeight - ((Math.log10(y) - Math.log10(yMin)) / (Math.log10(yMax) - Math.log10(yMin))) * chartHeight;
+
+  // Generate X-axis labels
   const xAxisLabels = [];
-  const yAxisLabels = [];
-  
-  // X-axis labels (logarithmic spacing)
-  const logMin = Math.log10(xMin);
-  const logMax = Math.log10(xMax);
-  const logRange = logMax - logMin;
-  
-  for (let i = Math.floor(logMin); i <= Math.ceil(logMax); i++) {
-    const value = Math.pow(10, i);
+  for (let exponent = Math.floor(Math.log10(xMin)); exponent <= Math.ceil(Math.log10(xMax)); exponent++) {
+    const value = Math.pow(10, exponent);
     if (value >= xMin && value <= xMax) {
       xAxisLabels.push({
         value,
@@ -101,15 +118,46 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
     }
   }
 
-  // Y-axis labels
-  const yStep = Math.pow(10, Math.floor(Math.log10(yMax)));
-  for (let y = 0; y <= yMax; y += yStep) {
-    if (y <= yMax) {
+  // Y-axis label generation
+  let yAxisLabels = [];
+  const minExponent = Math.floor(Math.log10(yMin));
+  const maxExponent = Math.ceil(Math.log10(yMax));
+
+  // First add the decade marks
+  for (let exponent = minExponent; exponent <= maxExponent; exponent++) {
+    const decade = Math.pow(10, exponent);
+    if (decade >= yMin && decade <= yMax) {
       yAxisLabels.push({
-        value: y,
-        position: scaleY(y)
+        value: decade,
+        position: scaleY(decade)
       });
     }
+  }
+
+  // Then add intermediate values if the range is small
+  if ((maxExponent - minExponent) <= 2) {
+    for (let exponent = minExponent; exponent <= maxExponent; exponent++) {
+      const base = Math.pow(10, exponent);
+      for (let multiplier of [2, 3, 4, 5, 6, 7, 8, 9]) {
+        const value = base * multiplier;
+        if (value > yMin && value < yMax) {
+          yAxisLabels.push({
+            value,
+            position: scaleY(value)
+          });
+        }
+      }
+    }
+  }
+
+  // Sort the labels by value
+  yAxisLabels.sort((a, b) => a.value - b.value);
+
+  // Limit the number of labels to prevent overcrowding
+  const MAX_LABELS = 8;
+  if (yAxisLabels.length > MAX_LABELS) {
+    const step = Math.ceil(yAxisLabels.length / MAX_LABELS);
+    yAxisLabels = yAxisLabels.filter((_, i) => i % step === 0);
   }
 
   return (
@@ -122,7 +170,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
           y1={padding + chartHeight}
           x2={padding + chartWidth}
           y2={padding + chartHeight}
-          stroke="#CBD5E1"
+          stroke="#000"
           strokeWidth={1}
         />
         <Line
@@ -130,11 +178,11 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
           y1={padding}
           x2={padding}
           y2={padding + chartHeight}
-          stroke="#CBD5E1"
+          stroke="#000"
           strokeWidth={1}
         />
 
-        {/* Grid lines and labels */}
+        {/* Grid lines */}
         {xAxisLabels.map((label, index) => (
           <G key={`x-${index}`}>
             <Line
@@ -142,7 +190,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
               y1={padding}
               x2={label.position}
               y2={padding + chartHeight}
-              stroke="#E2E8F0"
+              stroke="#000"
               strokeWidth={0.5}
               strokeDasharray="4,4"
             />
@@ -151,7 +199,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
               y={padding + chartHeight + 15}
               textAnchor="middle"
               fontSize="10"
-              fill="#64748B"
+              fill="#000"
             >
               {label.value}
             </SvgText>
@@ -165,7 +213,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
               y1={label.position}
               x2={padding + chartWidth}
               y2={label.position}
-              stroke="#E2E8F0"
+              stroke="#000"
               strokeWidth={0.5}
               strokeDasharray="4,4"
             />
@@ -174,38 +222,40 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
               y={label.position + 4}
               textAnchor="end"
               fontSize="10"
-              fill="#64748B"
+              fill="#000"
             >
-              {label.value}
+              {label.value >= 1000 ? `${(label.value/1000).toFixed(label.value % 1000 === 0 ? 0 : 1)}k` : label.value}
             </SvgText>
           </G>
         ))}
 
         {/* Data points and line */}
-        {data.map((point, index) => {
-          if (index === 0) return null;
-          
-          return (
-            <G key={`point-${index}`}>
-              <Line
-                x1={scaleX(data[index - 1].x)}
-                y1={scaleY(data[index - 1].y)}
-                x2={scaleX(point.x)}
-                y2={scaleY(point.y)}
-                stroke={color}
-                strokeWidth={2}
-              />
-              <Circle
-                cx={scaleX(point.x)}
-                cy={scaleY(point.y)}
-                r={4}
-                fill="white"
-                stroke={color}
-                strokeWidth={2}
-              />
-            </G>
-          );
-        })}
+   // In your VESGraph component, replace this part:
+{data.map((point, index) => {
+  if (index === 0) return null;
+  
+  return (
+    <G key={`point-${index}`}>
+      <Line
+        x1={scaleX(data[index - 1].x)}
+        y1={scaleY(data[index - 1].y)}
+        x2={scaleX(point.x)}
+        y2={scaleY(point.y)}
+        stroke={color}
+        strokeWidth={2}
+      />
+      <Rect
+        x={scaleX(point.x) - 3} // Center the square by offsetting half its width
+        y={scaleY(point.y) - 3} // Center the square by offsetting half its height
+        width={3} // Smaller size than the original circle
+        height={3} // Smaller size than the original circle
+               fill="#FF0000" // Red fill
+        stroke="#FF0000" 
+        strokeWidth={2}
+      />
+    </G>
+  );
+})}
 
         {/* Axis titles */}
         <SvgText
@@ -214,7 +264,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
           textAnchor="middle"
           fontSize="12"
           fontWeight="bold"
-          fill="#475569"
+          fill="#000"
         >
           AB/2 (m)
         </SvgText>
@@ -224,7 +274,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
           textAnchor="middle"
           fontSize="12"
           fontWeight="bold"
-          fill="#475569"
+          fill="#000"
           transform={`rotate(-90, 10, ${height / 2})`}
         >
           {title.includes("Resistivity") ? "Resistivity (Ω·m)" : "TDIP"}
@@ -239,10 +289,9 @@ const DataEntryScreen = () => {
   const params = useLocalSearchParams();
   const viewRef = useRef<ScrollView>(null);
   const graphRef = useRef<View>(null);
-  const scrollRef = useRef<ScrollView>(null);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [currentVES, setCurrentVES] = useState(1);
-  const [readings, setReadings] = useState<Reading[]>([]);
+  const [readings, setReadings] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("Resistivity");
   const [azimuth, setAzimuth] = useState("");
@@ -267,42 +316,33 @@ const DataEntryScreen = () => {
   });
 
   // Calculate K factor
-  interface CalculateK {
-    (ab2: number | string, mn2: number | string): string;
-  }
-
-  const calculateK: CalculateK = (ab2, mn2) => {
-    if (!ab2 || !mn2) return "";
-    const ab2Num = parseFloat(ab2 as string);
-    const mn2Num = parseFloat(mn2 as string);
-    
-    if (isNaN(ab2Num)) return "";
-    if (isNaN(mn2Num)) return "";
-    
-    const mn = 2 * mn2Num;
-    const numerator = Math.pow(ab2Num, 2) - Math.pow(mn2Num, 2);
+  const calculateK = (ab2: number, mn2: number) => {
+    const numerator = Math.pow(ab2, 2) - Math.pow(mn2, 2);
     if (numerator <= 0) return "";
-    
-    const k = (Math.PI * numerator) / mn;
+    const k = (Math.PI * numerator) / (2 * mn2);
     return k.toFixed(2);
   };
 
-  // Initialize readings
+  // Initialize readings grouped by MN/2
   useEffect(() => {
-    const initialReadings = AB2_VALUES.map((ab2, index) => {
-      const mn2 = MN2_VALUES[index] || 0.25;
-      return {
-        id: index,
-        ab2,
-        mn2,
-        k: calculateK(ab2, mn2),
-        resistivity: "",
-        tdip: "",
-        resistivityRef: React.createRef(),
-        tdipRef: React.createRef(),
-      };
+    const initialReadings: any[] = [];
+    let idCounter = 0;
+    
+    READINGS_GROUPS.forEach(group => {
+      group.ab2Values.forEach(ab2 => {
+        initialReadings.push({
+          id: idCounter++,
+          ab2,
+          mn2: group.mn2,
+          k: calculateK(ab2, group.mn2),
+          resistivity: "",
+          tdip: "",
+          resistivityRef: React.createRef(),
+          tdipRef: React.createRef(),
+        });
+      });
     });
-    // @ts-ignore
+    
     setReadings(initialReadings);
 
     // Set up date/time updater
@@ -316,17 +356,8 @@ const DataEntryScreen = () => {
         try {
           const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
           const projects = existingProjects ? JSON.parse(existingProjects) : [];
-          // @ts-ignore
-          const project = projects.find(p => p.id === params.projectId);
+          const project = projects.find((p: any) => p.id === params.projectId);
           
-          if (project) {
-            setProjectData(project);
-            if (project.vesPoints.length > 0) {
-              // @ts-ignore
-              const maxId = Math.max(...project.vesPoints.map(v => v.id));
-              setCurrentVES(maxId + 1);
-            }
-          }
         } catch (error) {
           console.error("Failed to load project:", error);
         }
@@ -339,11 +370,7 @@ const DataEntryScreen = () => {
   }, []);
 
   // Format date for display
-  interface FormatDate {
-    (date: Date): string;
-  }
-
-  const formatDate: FormatDate = (date) => {
+  const formatDate = (date: Date) => {
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -352,11 +379,7 @@ const DataEntryScreen = () => {
   };
 
   // Format time for display
-  interface FormatTime {
-    (date: Date): string;
-  }
-
-  const formatTime: FormatTime = (date) => {
+  const formatTime = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -365,35 +388,19 @@ const DataEntryScreen = () => {
   };
 
   // Handle input change
-  interface Reading {
-    id: number;
-    ab2: number;
-    mn2: number;
-    k: string;
-    resistivity: string;
-    tdip: string;
-    resistivityRef: React.RefObject<TextInput>;
-    tdipRef: React.RefObject<TextInput>;
-  }
-
-  type ReadingField = "ab2" | "mn2" | "k" | "resistivity" | "tdip";
-
-  const handleInputChange = (
-    index: number,
-    field: ReadingField,
-    value: string
-  ): void => {
-    setReadings((prev: Reading[]) => {
+  const handleInputChange = (index: number, field: string, value: string) => {
+    setReadings((prev: any[]) => {
       const newReadings = [...prev];
-      // @ts-ignore
       newReadings[index][field] = value;
 
       // Recalculate K when AB/2 or MN/2 changes
       if (field === "ab2" || field === "mn2") {
-        newReadings[index].k = calculateK(
-          field === "ab2" ? value : newReadings[index].ab2,
-          field === "mn2" ? value : newReadings[index].mn2
-        );
+        const ab2Val = field === "ab2" ? parseFloat(value) : newReadings[index].ab2;
+        const mn2Val = field === "mn2" ? parseFloat(value) : newReadings[index].mn2;
+        
+        if (!isNaN(ab2Val) && !isNaN(mn2Val)) {
+          newReadings[index].k = calculateK(ab2Val, mn2Val);
+        }
       }
 
       return newReadings;
@@ -401,9 +408,9 @@ const DataEntryScreen = () => {
   };
 
   // Prepare graph data
-  const getGraphData = (): { resistivityData: { x: number; y: number }[]; tdipData: { x: number; y: number }[] } => {
-    const resistivityData: { x: number; y: number }[] = [];
-    const tdipData: { x: number; y: number }[] = [];
+  const getGraphData = () => {
+    const resistivityData: any[] = [];
+    const tdipData: any[] = [];
     
     readings.forEach((reading) => {
       if (reading.resistivity) {
@@ -425,54 +432,13 @@ const DataEntryScreen = () => {
   };
 
   // Save project data to AsyncStorage
-  interface ProjectLocationInfo {
-    village: string;
-    sublocation: string;
-    location: string;
-    ward: string;
-    subCounty: string;
-    county: string;
-  }
-
-  interface ProjectSurveyData {
-    surveyType: string;
-    arrayType: string;
-    operator: string;
-  }
-
-  interface VESReading {
-    ab2: number;
-    mn2: number;
-    mn: number;
-    k: string;
-    resistivity: string;
-    tdip: string;
-  }
-
-  interface VESPoint {
-    id: number;
-    date: string;
-    location: Location.LocationObjectCoords | null;
-    azimuth: string;
-    description: string;
-    readings: VESReading[];
-  }
-
-  interface ProjectData {
-    id: string;
-    name: string;
-    locationInfo: ProjectLocationInfo;
-    surveyData: ProjectSurveyData;
-    vesPoints: VESPoint[];
-  }
-
-  const saveProjectToStorage = async (project: ProjectData): Promise<boolean> => {
+  const saveProjectToStorage = async (project: any) => {
     try {
       const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
-      let projects: ProjectData[] = existingProjects ? JSON.parse(existingProjects) : [];
+      let projects: any[] = existingProjects ? JSON.parse(existingProjects) : [];
       
       // Check if project already exists
-      const existingIndex = projects.findIndex((p: ProjectData) => p.id === project.id);
+      const existingIndex = projects.findIndex((p: any) => p.id === project.id);
       
       if (existingIndex !== -1) {
         projects[existingIndex] = project;
@@ -518,7 +484,6 @@ const DataEntryScreen = () => {
         readings: readings.map((r) => ({
           ab2: r.ab2,
           mn2: r.mn2,
-          mn: 2 * r.mn2, // Store M.N = (MN/2) * 2
           k: r.k,
           resistivity: r.resistivity,
           tdip: r.tdip,
@@ -532,20 +497,18 @@ const DataEntryScreen = () => {
       };
       
       // Save to AsyncStorage
-      // @ts-ignore
       const saveResult = await saveProjectToStorage(updatedProject);
       
       if (!saveResult) {
         throw new Error("Failed to save project data");
       }
 
-      // @ts-ignore
       setProjectData(updatedProject);
 
       // Move to next VES
       setCurrentVES((prev) => prev + 1);
 
-      // Reset readings for next VES and scroll to top
+      // Reset readings for next VES
       setReadings((prev) =>
         prev.map((r) => ({ ...r, resistivity: "", tdip: "" }))
       );
@@ -554,18 +517,9 @@ const DataEntryScreen = () => {
       setAzimuth("");
       setDescription("");
       
-      // Scroll to top of table
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-      }, 100);
-
       Alert.alert("Success", `VES${currentVES} saved successfully!`);
-    } catch (error) {
-      const errorMessage =
-        typeof error === "object" && error !== null && "message" in error
-          ? (error as { message?: string }).message
-          : "Could not save VES data";
-      Alert.alert("Save Error", errorMessage);
+    } catch (error: any) {
+      Alert.alert("Save Error", error.message || "Could not save VES data");
       console.error("Save error:", error);
     } finally {
       setIsSaving(false);
@@ -581,7 +535,7 @@ const DataEntryScreen = () => {
     }
 
     // Check if there's any data to save
-    const hasData = readings.some(r => r.resistivity || r.tdip);
+    const hasData = readings.some((r: any) => r.resistivity || r.tdip);
     
     if (!hasData) {
       Alert.alert("No Data", "Please enter some measurements before saving");
@@ -604,7 +558,7 @@ const DataEntryScreen = () => {
 
     try {
       // Save current VES if data exists and mandatory fields are filled
-      const hasData = readings.some((r) => r.resistivity || r.tdip);
+      const hasData = readings.some((r: any) => r.resistivity || r.tdip);
       if (hasData && azimuth.trim() && description.trim()) {
         await saveCurrentVES();
       }
@@ -621,7 +575,7 @@ const DataEntryScreen = () => {
 
   // Confirm end project
   const confirmEndProject = () => {
-    const hasCurrentData = readings.some(r => r.resistivity || r.tdip);
+    const hasCurrentData = readings.some((r: any) => r.resistivity || r.tdip);
     const vesCount = projectData.vesPoints.length;
     
     let message = "Are you sure you want to end this project?";
@@ -672,113 +626,102 @@ const DataEntryScreen = () => {
     }
   };
 
-  // Check if device is tablet and in landscape
-  const isTablet = width >= 768;
-  const isLandscape = width > height;
-  const responsiveLayout = isTablet && isLandscape;
+  // Render data table grouped by MN/2
+const renderDataTable = () => {
+  // Group readings by MN/2
+  const groups: Record<number, any[]> = {};
+  
+  readings.forEach((reading: any) => {
+    if (!groups[reading.mn2]) {
+      groups[reading.mn2] = [];
+    }
+    groups[reading.mn2].push(reading);
+  });
 
-  // Render data table with scrollable body
-  const renderDataTable = () => (
+  // Sort the groups by MN/2 in the order we want
+  const sortedGroups = Object.entries(groups).sort((a, b) => {
+    const order = [0.5, 5, 10, 25];
+    return order.indexOf(parseFloat(a[0])) - order.indexOf(parseFloat(b[0]));
+  });
+
+  return (
     <View style={localStyles.tableContainer}>
       {/* Fixed Table Header */}
       <View style={localStyles.tableRow}>
-        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 0.7 : 0.7 }]}>AB/2 (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 0.7 : 0.7 }]}>MN/2 (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1 : 1 }]}>K</Text>
-        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1.2 : 1.2 }]}>
+        <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>AB/2 (m)</Text>
+        <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>MN/2 (m)</Text>
+        <Text style={[localStyles.tableHeader, { flex: 1 }]}>K</Text>
+        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>
           Resistivity (Ω·m)
         </Text>
-        <Text style={[localStyles.tableHeader, { flex: responsiveLayout ? 1.2 : 1.2 }]}>TDIP</Text>
+        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>TDIP</Text>
       </View>
 
-      {/* Scrollable Table Body */}
-      <ScrollView
-        style={localStyles.tableBody}
-        contentContainerStyle={{ paddingBottom: 20 }}
-        ref={scrollRef}
-        showsVerticalScrollIndicator={true}
-      >
-        {readings.map((row, rowIndex) => (
-          <View key={row.id} style={localStyles.tableRow}>
-            <Text
-              style={[localStyles.tableCell, { flex: responsiveLayout ? 0.7 : 0.7, fontWeight: "bold" }]}
-            >
-              {row.ab2}
-            </Text>
-            
-            <TextInput
-              style={[localStyles.tableInput, { flex: responsiveLayout ? 0.7 : 0.7 }]}
-              value={row.mn2.toString()}
-              onChangeText={(value) =>
-                handleInputChange(rowIndex, "mn2", value)
-              }
-              keyboardType="decimal-pad"
-              placeholder="0.0"
-              placeholderTextColor="#94A3B8"
-              returnKeyType="next"
-              onSubmitEditing={() => {
-                // Move to K in same row
-                readings[rowIndex + 1]?.resistivityRef.current?.focus();
-              }}
-            />
-
-            <Text
-              style={[localStyles.tableCell, { flex: responsiveLayout ? 1 : 1, fontWeight: "bold" }]}
-            >
-              {row.k}
-            </Text>
-
-            <TextInput
-              ref={row.resistivityRef}
-              style={[localStyles.tableInput, { flex: responsiveLayout ? 1.2 : 1.2 }]}
-              value={row.resistivity}
-              onChangeText={(value) =>
-                handleInputChange(rowIndex, "resistivity", value)
-              }
-              keyboardType="decimal-pad"
-              placeholder="0.0"
-              placeholderTextColor="#94A3B8"
-              returnKeyType="next"
-              onSubmitEditing={() => {
-                // Move to TDIP in same row
-                row.tdipRef.current?.focus();
-              }}
-            />
-
-            <TextInput
-              ref={row.tdipRef}
-              style={[localStyles.tableInput, { flex: responsiveLayout ? 1.2 : 1.2 }]}
-              value={row.tdip}
-              onChangeText={(value) =>
-                handleInputChange(rowIndex, "tdip", value)
-              }
-              keyboardType="decimal-pad"
-              placeholder="0.0"
-              placeholderTextColor="#94A3B8"
-              returnKeyType={rowIndex === readings.length - 1 ? "done" : "next"}
-              onSubmitEditing={() => {
-                if (rowIndex < readings.length - 1) {
-                  // Move to next row's MN/2
-                  readings[rowIndex + 1]?.resistivityRef.current?.focus();
-                  // Scroll to next row
-                  scrollRef.current?.scrollTo({
-                    y: (rowIndex + 1) * 60,
-                    animated: true,
-                  });
-                } else {
-                  Keyboard.dismiss();
-                }
-              }}
-            />
+      {/* Table Body - Grouped by MN/2 */}
+      {sortedGroups.map(([mn2, groupReadings]) => (
+        <View key={mn2}>
+          <View style={localStyles.groupHeader}>
+            <Text style={localStyles.groupHeaderText}>MN/2: {mn2}m</Text>
           </View>
-        ))}
-      </ScrollView>
+          
+          {groupReadings.map((row, rowIndex) => (
+            <View key={row.id} style={localStyles.tableRow}>
+              <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
+                {row.ab2}
+              </Text>
+              <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
+                {row.mn2}
+              </Text>
+              <Text style={[localStyles.tableCell, { flex: 1 }]}>
+                {row.k}
+              </Text>
+              <TextInput
+                style={[localStyles.tableInput, { flex: 1.2 }]}
+                value={row.resistivity}
+                onChangeText={(value) =>
+                  handleInputChange(
+                    readings.findIndex((r) => r.id === row.id),
+                    "resistivity",
+                    value
+                  )
+                }
+                placeholder="Ω·m"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                ref={row.resistivityRef}
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => {
+                  row.tdipRef?.current?.focus();
+                }}
+              />
+              <TextInput
+                style={[localStyles.tableInput, { flex: 1.2 }]}
+                value={row.tdip}
+                onChangeText={(value) =>
+                  handleInputChange(
+                    readings.findIndex((r) => r.id === row.id),
+                    "tdip",
+                    value
+                  )
+                }
+                placeholder="TDIP"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                ref={row.tdipRef}
+                returnKeyType="done"
+              />
+            </View>
+          ))}
+        </View>
+      ))}
     </View>
   );
+};
 
   const { resistivityData, tdipData } = getGraphData();
-  const graphWidth = responsiveLayout ? (width - 60) / 2 : width - 40;
-  const graphHeight = responsiveLayout ? 250 : 300;
+  const graphWidth = width - 40;
+  const graphHeight = 300;
 
   return (
     <ScrollView contentContainerStyle={localStyles.container} ref={viewRef}>
@@ -877,109 +820,96 @@ const DataEntryScreen = () => {
         </Text>
       </Animatable.View>
 
-      {/* Responsive layout container */}
-      <View style={responsiveLayout ? localStyles.responsiveContainer : null}>
-        {/* Data Table */}
-        <Animatable.View
-          animation="fadeInUp"
-          delay={300}
-          style={[
-            localStyles.dataCard,
-            responsiveLayout ? { flex: 1, marginRight: 10 } : null
-          ]}
-        >
-          <View style={localStyles.sectionHeader}>
-            <Ionicons name="grid-outline" size={24} color={accentColor} />
-            <Text style={localStyles.sectionTitle}>Resistivity/IP Data</Text>
-          </View>
+      {/* Data Table */}
+      <Animatable.View
+        animation="fadeInUp"
+        delay={300}
+        style={localStyles.dataCard}
+      >
+        <View style={localStyles.sectionHeader}>
+          <Ionicons name="grid-outline" size={24} color={accentColor} />
+          <Text style={localStyles.sectionTitle}>Resistivity/IP Data</Text>
+        </View>
 
-          {renderDataTable()}
+        {renderDataTable()}
+      </Animatable.View>
 
-          <Text style={localStyles.tableNote}>
-            Press "Next" after entering TDIP to automatically move to the next row
-          </Text>
-        </Animatable.View>
-
-        {/* Graph Section */}
-        <Animatable.View
-          animation="fadeInUp"
-          delay={500}
-          style={[
-            localStyles.graphCard,
-            responsiveLayout ? { flex: 1 } : null
-          ]}
-        >
-          <View style={localStyles.sectionHeader}>
-            <Ionicons name="analytics-outline" size={24} color={accentColor} />
-            <Text style={localStyles.sectionTitle}>RES-IP Curve</Text>
-          </View>
-          
-          {/* Graph Tabs */}
-          <View style={localStyles.tabContainer}>
-            <TouchableOpacity
-              style={[
-                localStyles.tabButton,
-                activeTab === "Resistivity" && localStyles.activeTab
-              ]}
-              onPress={() => setActiveTab("Resistivity")}
-            >
-              <Text style={[
-                localStyles.tabText,
-                activeTab === "Resistivity" && localStyles.activeTabText
-              ]}>
-                Resistivity
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                localStyles.tabButton,
-                activeTab === "TDIP" && localStyles.activeTab
-              ]}
-              onPress={() => setActiveTab("TDIP")}
-            >
-              <Text style={[
-                localStyles.tabText,
-                activeTab === "TDIP" && localStyles.activeTabText
-              ]}>
-                TD/IP
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Graph Container */}
-          <View ref={graphRef} style={localStyles.graphWrapper}>
-            {activeTab === "Resistivity" ? (
-              <VESGraph
-                data={resistivityData}
-                title={`Resistivity - VES${currentVES}`}
-                color={primaryColor}
-                width={graphWidth}
-                height={graphHeight}
-              />
-            ) : (
-              <VESGraph
-                data={tdipData}
-                title={`TD/IP - VES${currentVES}`}
-                color={accentColor}
-                width={graphWidth}
-                height={graphHeight}
-              />
-            )}
-          </View>
-          
-          {/* Graph Actions */}
+      {/* Graph Section */}
+      <Animatable.View
+        animation="fadeInUp"
+        delay={500}
+        style={localStyles.graphCard}
+      >
+        <View style={localStyles.sectionHeader}>
+          <Ionicons name="analytics-outline" size={24} color={accentColor} />
+          <Text style={localStyles.sectionTitle}>RES-IP Curve</Text>
+        </View>
+        
+        {/* Graph Tabs */}
+        <View style={localStyles.tabContainer}>
           <TouchableOpacity
-            style={localStyles.downloadButton}
-            onPress={captureGraph}
+            style={[
+              localStyles.tabButton,
+              activeTab === "Resistivity" && localStyles.activeTab
+            ]}
+            onPress={() => setActiveTab("Resistivity")}
           >
-            <Ionicons name="download-outline" size={20} color="white" />
-            <Text style={localStyles.downloadButtonText}>
-              DOWNLOAD {activeTab.toUpperCase()} GRAPH
+            <Text style={[
+              localStyles.tabText,
+              activeTab === "Resistivity" && localStyles.activeTabText
+            ]}>
+              Resistivity
             </Text>
           </TouchableOpacity>
-        </Animatable.View>
-      </View>
+          
+          <TouchableOpacity
+            style={[
+              localStyles.tabButton,
+              activeTab === "TDIP" && localStyles.activeTab
+            ]}
+            onPress={() => setActiveTab("TDIP")}
+          >
+            <Text style={[
+              localStyles.tabText,
+              activeTab === "TDIP" && localStyles.activeTabText
+            ]}>
+              TD/IP
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Graph Container */}
+        <View ref={graphRef} style={localStyles.graphWrapper}>
+          {activeTab === "Resistivity" ? (
+            <VESGraph
+              data={resistivityData}
+              title={`Resistivity - VES${currentVES}`}
+              color={primaryColor}
+              width={graphWidth}
+              height={graphHeight}
+            />
+          ) : (
+            <VESGraph
+              data={tdipData}
+              title={`TD/IP - VES${currentVES}`}
+              color={accentColor}
+              width={graphWidth}
+              height={graphHeight}
+            />
+          )}
+        </View>
+        
+        {/* Graph Actions */}
+        <TouchableOpacity
+          style={localStyles.downloadButton}
+          onPress={captureGraph}
+        >
+          <Ionicons name="download-outline" size={20} color="white" />
+          <Text style={localStyles.downloadButtonText}>
+            DOWNLOAD {activeTab.toUpperCase()} GRAPH
+          </Text>
+        </TouchableOpacity>
+      </Animatable.View>
 
       {/* Action Buttons */}
       <View style={localStyles.actionContainer}>
@@ -996,14 +926,6 @@ const DataEntryScreen = () => {
               <Text style={localStyles.actionButtonText}>SAVE VES</Text>
             </>
           )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[localStyles.actionButton, { backgroundColor: "#2C6BED" }]}
-          onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-        >
-          <Ionicons name="arrow-up-outline" size={20} color="white" />
-          <Text style={localStyles.actionButtonText}>TOP</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1135,15 +1057,11 @@ const localStyles = StyleSheet.create({
     marginTop: 10,
     fontStyle: "italic",
   },
-  responsiveContainer: {
-    flexDirection: "row",
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
   dataCard: {
     backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
+    marginHorizontal: 20,
     marginBottom: 20,
     elevation: 4,
     shadowColor: "#000",
@@ -1155,6 +1073,7 @@ const localStyles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
+    marginHorizontal: 20,
     marginBottom: 20,
     elevation: 4,
     shadowColor: "#000",
@@ -1179,7 +1098,16 @@ const localStyles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginTop: 10,
-    maxHeight: 400,
+  },
+  groupHeader: {
+    backgroundColor: "#E2E8F0",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+  },
+  groupHeaderText: {
+    fontFamily: "JosefinSans_700Bold",
+    fontSize: 16,
+    color: secondaryColor,
   },
   tableRow: {
     flexDirection: "row",
@@ -1197,9 +1125,6 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: 5,
     backgroundColor: "#F1F5F9",
     textAlign: "center",
-  },
-  tableBody: {
-    flexGrow: 1,
   },
   tableCell: {
     fontFamily: "JosefinSans_400Regular",
@@ -1219,13 +1144,6 @@ const localStyles = StyleSheet.create({
     textAlign: "center",
     marginHorizontal: 2,
     minWidth: 0,
-  },
-  tableNote: {
-    fontFamily: "JosefinSans_400Regular",
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 10,
-    textAlign: "center",
   },
   tabContainer: {
     flexDirection: "row",
