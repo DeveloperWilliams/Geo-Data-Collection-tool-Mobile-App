@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RES-IP Datalog",
-    "slug": "Resistivity/IP Datalogger",
+    "slug": "resistivity-ip-datalogger",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.archyj.resistivityipdatalogger"
     },
     "web": {
       "bundler": "metro",
@@ -37,6 +38,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bac2dcda-4be2-4ad6-9ca6-e678f23d1561"
+      }
     }
   }
 }

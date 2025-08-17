@@ -36,9 +36,6 @@ export default function HomeScreen() {
           */
         }
         <Text style={styles.appTitle}>GeoTruth Consult</Text>
-        <Text style={styles.appSubtitle}>
-          Professional Geotechnical Data Collection
-        </Text>
       </View>
 
       <View style={styles.cardContainer}>

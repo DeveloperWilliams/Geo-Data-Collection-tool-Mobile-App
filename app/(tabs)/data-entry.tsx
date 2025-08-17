@@ -38,11 +38,11 @@ const READINGS_GROUPS = [
   },
   {
     mn2: 10,
-    ab2Values: [32.0, 40.0, 50.0, 63.0]
+    ab2Values: [32.0, 40.0, 50.0, 63.0, 80.0]
   },
   {
     mn2: 25,
-    ab2Values: [80.0, 80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0]
+    ab2Values: [80.0, 100.0, 130.0, 160.0, 200.0, 250.0, 320.0]
   }
 ];
 
@@ -503,6 +503,7 @@ const DataEntryScreen = () => {
         throw new Error("Failed to save project data");
       }
 
+      // @ts-ignore
       setProjectData(updatedProject);
 
       // Move to next VES
