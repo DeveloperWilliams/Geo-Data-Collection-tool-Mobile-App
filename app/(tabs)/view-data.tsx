@@ -718,7 +718,7 @@ const ViewProjectScreen = () => {
             <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>MN/2 (m)</Text>
             <Text style={[localStyles.tableHeader, { flex: 1 }]}>K</Text>
             <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>
-              Resistivity (Ω·m)
+              Resistivity (Ωm)
             </Text>
             <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>TDIP</Text>
           </View>
