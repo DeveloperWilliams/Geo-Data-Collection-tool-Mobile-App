@@ -230,32 +230,31 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
         ))}
 
         {/* Data points and line */}
-   // In your VESGraph component, replace this part:
-{data.map((point, index) => {
-  if (index === 0) return null;
-  
-  return (
-    <G key={`point-${index}`}>
-      <Line
-        x1={scaleX(data[index - 1].x)}
-        y1={scaleY(data[index - 1].y)}
-        x2={scaleX(point.x)}
-        y2={scaleY(point.y)}
-        stroke={color}
-        strokeWidth={2}
-      />
-      <Rect
-        x={scaleX(point.x) - 3} // Center the square by offsetting half its width
-        y={scaleY(point.y) - 3} // Center the square by offsetting half its height
-        width={3} // Smaller size than the original circle
-        height={3} // Smaller size than the original circle
-               fill="#FF0000" // Red fill
-        stroke="#FF0000" 
-        strokeWidth={2}
-      />
-    </G>
-  );
-})}
+        {data.map((point, index) => {
+          if (index === 0) return null;
+          
+          return (
+            <G key={`point-${index}`}>
+              <Line
+                x1={scaleX(data[index - 1].x)}
+                y1={scaleY(data[index - 1].y)}
+                x2={scaleX(point.x)}
+                y2={scaleY(point.y)}
+                stroke={color}
+                strokeWidth={2}
+              />
+              <Rect
+                x={scaleX(point.x) - 3}
+                y={scaleY(point.y) - 3}
+                width={3}
+                height={3}
+                fill="#FF0000"
+                stroke="#FF0000" 
+                strokeWidth={2}
+              />
+            </G>
+          );
+        })}
 
         {/* Axis titles */}
         <SvgText
@@ -325,6 +324,31 @@ const DataEntryScreen = () => {
 
   // Initialize readings grouped by MN/2
   useEffect(() => {
+    const loadProject = async () => {
+      try {
+        // Set VES number if coming from "Continue Project"
+        if (params.nextVES) {
+          setCurrentVES(parseInt(params.nextVES.toString()));
+        }
+
+        // Load existing project data if provided
+        if (params.projectId && params.existingProject === "true") {
+          const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
+          const projects = existingProjects ? JSON.parse(existingProjects) : [];
+          const project = projects.find((p: any) => p.id === params.projectId);
+          
+          if (project) {
+            setProjectData(project);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load project:", error);
+      }
+    };
+    
+    loadProject();
+
+    // Initialize readings
     const initialReadings: any[] = [];
     let idCounter = 0;
     
@@ -350,24 +374,8 @@ const DataEntryScreen = () => {
       setCurrentDateTime(new Date());
     }, 60000);
 
-    // Load existing project if editing
-    const loadProject = async () => {
-      if (params.projectId) {
-        try {
-          const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
-          const projects = existingProjects ? JSON.parse(existingProjects) : [];
-          const project = projects.find((p: any) => p.id === params.projectId);
-          
-        } catch (error) {
-          console.error("Failed to load project:", error);
-        }
-      }
-    };
-    
-    loadProject();
-
     return () => clearInterval(timer);
-  }, []);
+  }, [params.projectId, params.existingProject, params.nextVES]);
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -491,10 +499,21 @@ const DataEntryScreen = () => {
       };
 
       // Update project data
-      const updatedProject = {
-        ...projectData,
-        vesPoints: [...projectData.vesPoints, newVESPoint],
-      };
+      let updatedProject;
+      
+      if (params.existingProject === "true") {
+        // For existing project, add to existing VES points
+        updatedProject = {
+          ...projectData,
+          vesPoints: [...projectData.vesPoints, newVESPoint],
+        };
+      } else {
+        // For new project, create new array with this VES point
+        updatedProject = {
+          ...projectData,
+          vesPoints: [newVESPoint],
+        };
+      }
       
       // Save to AsyncStorage
       const saveResult = await saveProjectToStorage(updatedProject);
@@ -506,19 +525,22 @@ const DataEntryScreen = () => {
       // @ts-ignore
       setProjectData(updatedProject);
 
-      // Move to next VES
-      setCurrentVES((prev) => prev + 1);
-
-      // Reset readings for next VES
+      // Reset form for next VES
       setReadings((prev) =>
         prev.map((r) => ({ ...r, resistivity: "", tdip: "" }))
       );
-      
-      // Reset mandatory fields
       setAzimuth("");
       setDescription("");
       
-      Alert.alert("Success", `VES${currentVES} saved successfully!`);
+      if (params.existingProject === "true") {
+        // For existing project, increment VES number
+        setCurrentVES((prev) => prev + 1);
+        Alert.alert("Success", `VES${currentVES} saved successfully!`);
+      } else {
+        // For new project, go to home screen
+        Alert.alert("Success", "Project created successfully!");
+        router.push("/");
+      }
     } catch (error: any) {
       Alert.alert("Save Error", error.message || "Could not save VES data");
       console.error("Save error:", error);
@@ -564,7 +586,12 @@ const DataEntryScreen = () => {
         await saveCurrentVES();
       }
 
-      Alert.alert("Project Completed", "All data has been saved successfully!");
+      Alert.alert(
+        "Project Completed", 
+        params.existingProject === "true" 
+          ? "All data has been saved successfully!" 
+          : "Project has been created successfully!"
+      );
       router.push("/");
     } catch (error) {
       Alert.alert("Save Error", "Failed to save project data");
@@ -579,7 +606,10 @@ const DataEntryScreen = () => {
     const hasCurrentData = readings.some((r: any) => r.resistivity || r.tdip);
     const vesCount = projectData.vesPoints.length;
     
-    let message = "Are you sure you want to end this project?";
+    let message = params.existingProject === "true" 
+      ? "Are you sure you want to end this project?" 
+      : "Are you sure you want to create this project?";
+      
     if (hasCurrentData) {
       message += "\n\nUnsaved measurements for the current VES will be saved.";
     }
@@ -588,11 +618,11 @@ const DataEntryScreen = () => {
     }
     
     Alert.alert(
-      "End Project",
+      params.existingProject === "true" ? "End Project" : "Create Project",
       message,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "End Project", onPress: endProject }
+        { text: "Confirm", onPress: endProject }
       ]
     );
   };
@@ -628,97 +658,97 @@ const DataEntryScreen = () => {
   };
 
   // Render data table grouped by MN/2
-const renderDataTable = () => {
-  // Group readings by MN/2
-  const groups: Record<number, any[]> = {};
-  
-  readings.forEach((reading: any) => {
-    if (!groups[reading.mn2]) {
-      groups[reading.mn2] = [];
-    }
-    groups[reading.mn2].push(reading);
-  });
+  const renderDataTable = () => {
+    // Group readings by MN/2
+    const groups: Record<number, any[]> = {};
+    
+    readings.forEach((reading: any) => {
+      if (!groups[reading.mn2]) {
+        groups[reading.mn2] = [];
+      }
+      groups[reading.mn2].push(reading);
+    });
 
-  // Sort the groups by MN/2 in the order we want
-  const sortedGroups = Object.entries(groups).sort((a, b) => {
-    const order = [0.5, 5, 10, 25];
-    return order.indexOf(parseFloat(a[0])) - order.indexOf(parseFloat(b[0]));
-  });
+    // Sort the groups by MN/2 in the order we want
+    const sortedGroups = Object.entries(groups).sort((a, b) => {
+      const order = [0.5, 5, 10, 25];
+      return order.indexOf(parseFloat(a[0])) - order.indexOf(parseFloat(b[0]));
+    });
 
-  return (
-    <View style={localStyles.tableContainer}>
-      {/* Fixed Table Header */}
-      <View style={localStyles.tableRow}>
-        <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>AB/2 (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>MN/2 (m)</Text>
-        <Text style={[localStyles.tableHeader, { flex: 1 }]}>K</Text>
-        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>
-          Resistivity (Ω·m)
-        </Text>
-        <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>TDIP</Text>
-      </View>
-
-      {/* Table Body - Grouped by MN/2 */}
-      {sortedGroups.map(([mn2, groupReadings]) => (
-        <View key={mn2}>
-          <View style={localStyles.groupHeader}>
-            <Text style={localStyles.groupHeaderText}>MN/2: {mn2}m</Text>
-          </View>
-          
-          {groupReadings.map((row, rowIndex) => (
-            <View key={row.id} style={localStyles.tableRow}>
-              <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
-                {row.ab2}
-              </Text>
-              <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
-                {row.mn2}
-              </Text>
-              <Text style={[localStyles.tableCell, { flex: 1 }]}>
-                {row.k}
-              </Text>
-              <TextInput
-                style={[localStyles.tableInput, { flex: 1.2 }]}
-                value={row.resistivity}
-                onChangeText={(value) =>
-                  handleInputChange(
-                    readings.findIndex((r) => r.id === row.id),
-                    "resistivity",
-                    value
-                  )
-                }
-                placeholder="Ω·m"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-                ref={row.resistivityRef}
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => {
-                  row.tdipRef?.current?.focus();
-                }}
-              />
-              <TextInput
-                style={[localStyles.tableInput, { flex: 1.2 }]}
-                value={row.tdip}
-                onChangeText={(value) =>
-                  handleInputChange(
-                    readings.findIndex((r) => r.id === row.id),
-                    "tdip",
-                    value
-                  )
-                }
-                placeholder="TDIP"
-                placeholderTextColor="#94A3B8"
-                keyboardType="numeric"
-                ref={row.tdipRef}
-                returnKeyType="done"
-              />
-            </View>
-          ))}
+    return (
+      <View style={localStyles.tableContainer}>
+        {/* Fixed Table Header */}
+        <View style={localStyles.tableRow}>
+          <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>AB/2 (m)</Text>
+          <Text style={[localStyles.tableHeader, { flex: 0.7 }]}>MN/2 (m)</Text>
+          <Text style={[localStyles.tableHeader, { flex: 1 }]}>K</Text>
+          <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>
+            Resistivity (Ω·m)
+          </Text>
+          <Text style={[localStyles.tableHeader, { flex: 1.2 }]}>TDIP</Text>
         </View>
-      ))}
-    </View>
-  );
-};
+
+        {/* Table Body - Grouped by MN/2 */}
+        {sortedGroups.map(([mn2, groupReadings]) => (
+          <View key={mn2}>
+            <View style={localStyles.groupHeader}>
+              <Text style={localStyles.groupHeaderText}>MN/2: {mn2}m</Text>
+            </View>
+            
+            {groupReadings.map((row, rowIndex) => (
+              <View key={row.id} style={localStyles.tableRow}>
+                <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
+                  {row.ab2}
+                </Text>
+                <Text style={[localStyles.tableCell, { flex: 0.7 }]}>
+                  {row.mn2}
+                </Text>
+                <Text style={[localStyles.tableCell, { flex: 1 }]}>
+                  {row.k}
+                </Text>
+                <TextInput
+                  style={[localStyles.tableInput, { flex: 1.2 }]}
+                  value={row.resistivity}
+                  onChangeText={(value) =>
+                    handleInputChange(
+                      readings.findIndex((r) => r.id === row.id),
+                      "resistivity",
+                      value
+                    )
+                  }
+                  placeholder="Ω·m"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  ref={row.resistivityRef}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => {
+                    row.tdipRef?.current?.focus();
+                  }}
+                />
+                <TextInput
+                  style={[localStyles.tableInput, { flex: 1.2 }]}
+                  value={row.tdip}
+                  onChangeText={(value) =>
+                    handleInputChange(
+                      readings.findIndex((r) => r.id === row.id),
+                      "tdip",
+                      value
+                    )
+                  }
+                  placeholder="TDIP"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                  ref={row.tdipRef}
+                  returnKeyType="done"
+                />
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   const { resistivityData, tdipData } = getGraphData();
   const graphWidth = width - 40;
@@ -935,7 +965,9 @@ const renderDataTable = () => {
           disabled={isSaving}
         >
           <Ionicons name="checkmark-done-outline" size={20} color="white" />
-          <Text style={localStyles.actionButtonText}>END PROJECT</Text>
+          <Text style={localStyles.actionButtonText}>
+            {params.existingProject === "true" ? "END PROJECT" : "CREATE PROJECT"}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

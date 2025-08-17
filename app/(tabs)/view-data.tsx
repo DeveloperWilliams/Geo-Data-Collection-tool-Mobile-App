@@ -252,7 +252,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
               fill="#000"
               transform={`rotate(-90, 10, ${height / 2})`}
             >
-              {title.includes("Resistivity") ? "Resistivity (Ω·m)" : "TDIP"}
+              {title.includes("Resistivity") ? "Resistivity (Ω·m)" : "App Resistivity (Ωm)"}
             </SvgText>
           </Svg>
         </View>
@@ -314,7 +314,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
           try {
             const existingProjects = await AsyncStorage.getItem(PROJECTS_STORAGE_KEY);
             const projects = existingProjects ? JSON.parse(existingProjects) : [];
-            const project = projects.find(p => p.id === params.projectId);
+            const project = (projects as ProjectData[]).find((p: ProjectData) => p.id === params.projectId);
             
             if (project) {
               setProjectData(project);
@@ -365,6 +365,7 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
 
       // Navigate to next/previous VES
       const handleNextVES = () => {
+        // @ts-ignore
         if (currentVESIndex < projectData.vesPoints.length - 1) {
           setCurrentVESIndex(currentVESIndex + 1);
         }
@@ -395,24 +396,34 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
       };
 
       // Prepare graph data
-      const getGraphData = (ves) => {
+      interface GraphDataPoint {
+        x: number;
+        y: number;
+      }
+
+      interface GraphData {
+        resistivityData: GraphDataPoint[];
+        tdipData: GraphDataPoint[];
+      }
+
+      const getGraphData = (ves: VESPoint | undefined): GraphData => {
         if (!ves) return { resistivityData: [], tdipData: [] };
 
-        const resistivityData: { x: number; y: number }[] = [];
-        const tdipData = [];
+        const resistivityData: GraphDataPoint[] = [];
+        const tdipData: GraphDataPoint[] = [];
 
-        ves.readings.forEach((reading) => {
+        ves.readings.forEach((reading: VESReading) => {
           if (reading.resistivity) {
             resistivityData.push({
               x: reading.ab2,
-              y: parseFloat(reading.resistivity) || 0
+              y: parseFloat(reading.resistivity as string) || 0
             });
           }
 
           if (reading.tdip) {
             tdipData.push({
               x: reading.ab2,
-              y: parseFloat(reading.tdip) || 0
+              y: parseFloat(reading.tdip as string) || 0
             });
           }
         });
@@ -421,27 +432,46 @@ const VESGraph: React.FC<VESGraphProps> = ({ data, title, color, width, height }
       };
 
       // Format date for display
-      const formatDate = (dateString) => {
+      interface FormatDateOptions {
+        year?: "numeric" | "2-digit";
+        month?: "numeric" | "2-digit" | "long" | "short" | "narrow";
+        day?: "numeric" | "2-digit";
+      }
+
+      const formatDate = (dateString: string, options?: FormatDateOptions): string => {
         const date = new Date(dateString);
         return date.toLocaleDateString("en-US", {
           year: "numeric",
           month: "short",
           day: "numeric",
+          ...options,
         });
       };
 
       // Format time for display
-      const formatTime = (dateString) => {
+      interface FormatTimeOptions {
+        hour?: "2-digit" | "numeric";
+        minute?: "2-digit" | "numeric";
+        hour12?: boolean;
+      }
+
+      const formatTime = (dateString: string, options?: FormatTimeOptions): string => {
         const date = new Date(dateString);
         return date.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
+          ...options,
         });
       };
 
       // Format location coordinates
-      const formatLocation = (location) => {
+      interface Location {
+        latitude: number;
+        longitude: number;
+      }
+
+      const formatLocation = (location: Location | undefined): string => {
         if (!location) return "Not captured";
         return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
       };
@@ -806,7 +836,7 @@ const exportToExcel = async () => {
             <View style={responsiveLayout ? localStyles.graphRow : null}>
               <View style={responsiveLayout ? { flex: 1, marginRight: 10 } : null}>
                 <Text style={localStyles.graphTitle}>
-                  Resistivity - VES{currentVES.id}
+                  Apparent Resistivity - VES{currentVES.id}
                 </Text>
                 <VESGraph
                   data={resistivityData}
