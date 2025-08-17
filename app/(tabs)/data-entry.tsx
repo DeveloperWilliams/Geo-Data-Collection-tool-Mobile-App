@@ -522,7 +522,6 @@ const DataEntryScreen = () => {
         throw new Error("Failed to save project data");
       }
 
-      // @ts-ignore
       setProjectData(updatedProject);
 
       // Reset form for next VES
