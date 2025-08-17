@@ -451,7 +451,6 @@ const ViewProjectScreen = () => {
         [{ v: "Project Details", s: { font: { bold: true, sz: 16 } } }],
         [],
         ["Project Name", projectData.name],
-        ["Created", new Date(projectData.id).toLocaleString()],
         ["Village", projectData.locationInfo.village],
         ["Sublocation", projectData.locationInfo.sublocation],
         ["Location", projectData.locationInfo.location],
@@ -477,19 +476,18 @@ const ViewProjectScreen = () => {
           ["Description", ves.description || "Not specified"],
           [],
           [{ v: "AB/2 (m)", s: { font: { bold: true } } }, 
-           { v: "MN/2 (m)", s: { font: { bold: true } } }, 
+           { v: "MN (m)", s: { font: { bold: true } } }, 
            { v: "K", s: { font: { bold: true } } }, 
-           { v: "Resistivity (Ω·m)", s: { font: { bold: true } } }, 
+           { v: "Resistivity (Ωm)", s: { font: { bold: true } } }, 
            { v: "TDIP", s: { font: { bold: true } } }]
         ];
 
         ves.readings.forEach((reading) => {
             vesData.push([
-            reading.ab2?.toString() ?? "",
-            reading.mn2 !== undefined ? reading.mn2.toString() : "",
-            reading.k?.toString() ?? "",
-            reading.resistivity?.toString() ?? "",
-            reading.tdip?.toString() ?? ""
+              reading.ab2?.toString() ?? "",
+              reading.mn2 !== undefined ? (Number(reading.mn2) * 2).toString() : "",
+              reading.resistivity?.toString() ?? "",
+              reading.tdip?.toString() ?? ""
             ]);
         });
         
