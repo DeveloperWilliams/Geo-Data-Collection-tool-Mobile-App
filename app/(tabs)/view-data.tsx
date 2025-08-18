@@ -437,116 +437,126 @@ const ViewProjectScreen = () => {
   };
 
   // Export project to Excel with improved quality
-  const exportToExcel = async () => {
-    if (!projectData) return;
+ // Updated exportToExcel function
+const exportToExcel = async () => {
+  if (!projectData) return;
+  
+  setIsExporting(true);
+  
+  try {
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
     
-    setIsExporting(true);
+    // Add project info sheet with formatting
+    const projectInfo = [
+      [{ v: "Project Details", s: { font: { bold: true, sz: 16 } } }],
+      [],
+      ["Project Name", projectData.name],
+      ["Village", projectData.locationInfo.village],
+      ["Sublocation", projectData.locationInfo.sublocation],
+      ["Location", projectData.locationInfo.location],
+      ["Ward", projectData.locationInfo.ward],
+      ["Sub-County", projectData.locationInfo.subCounty],
+      ["County", projectData.locationInfo.county],
+      ["Survey Type", projectData.surveyData.surveyType],
+      ["Array Type", projectData.surveyData.arrayType],
+      ["Operator", projectData.surveyData.operator],
+    ];
     
-    try {
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      
-      // Add project info sheet with formatting
-      const projectInfo = [
-        [{ v: "Project Details", s: { font: { bold: true, sz: 16 } } }],
+    const projectSheet = XLSX.utils.aoa_to_sheet(projectInfo);
+    XLSX.utils.book_append_sheet(workbook, projectSheet, "Project Info");
+    
+    // Add VES sheets with all columns
+    projectData.vesPoints.forEach((ves, index) => {
+      const vesData = [
+        [{ v: `VES Point: VES${ves.id}`, s: { font: { bold: true, sz: 14 } } }],
+        ["Date", formatDate(ves.date)],
+        ["Time", formatTime(ves.date)],
+        ["Location", formatLocation(ves.location)],
+        ["Azimuth (Degree)", ves.azimuth || "Not specified"],
+        ["Description", ves.description || "Not specified"],
         [],
-        ["Project Name", projectData.name],
-        ["Village", projectData.locationInfo.village],
-        ["Sublocation", projectData.locationInfo.sublocation],
-        ["Location", projectData.locationInfo.location],
-        ["Ward", projectData.locationInfo.ward],
-        ["Sub-County", projectData.locationInfo.subCounty],
-        ["County", projectData.locationInfo.county],
-        ["Survey Type", projectData.surveyData.surveyType],
-        ["Array Type", projectData.surveyData.arrayType],
-        ["Operator", projectData.surveyData.operator],
-      ];
-      
-      const projectSheet = XLSX.utils.aoa_to_sheet(projectInfo);
-      XLSX.utils.book_append_sheet(workbook, projectSheet, "Project Info");
-      
-      // Add VES sheets with formatting
-      projectData.vesPoints.forEach((ves, index) => {
-        const vesData = [
-          [{ v: `VES Point: VES${ves.id}`, s: { font: { bold: true, sz: 14 } } }],
-          ["Date", formatDate(ves.date)],
-          ["Time", formatTime(ves.date)],
-          ["Location", formatLocation(ves.location)],
-          ["Azimuth (Degree)", ves.azimuth || "Not specified"],
-          ["Description", ves.description || "Not specified"],
-          [],
-          [{ v: "AB/2 (m)", s: { font: { bold: true } } }, 
-           { v: "MN (m)", s: { font: { bold: true } } }, 
-           { v: "K", s: { font: { bold: true } } }, 
-           { v: "Resistivity (Ωm)", s: { font: { bold: true } } }, 
-           { v: "TDIP", s: { font: { bold: true } } }]
-        ];
-
-        ves.readings.forEach((reading) => {
-            vesData.push([
-              reading.ab2?.toString() ?? "",
-              reading.mn2 !== undefined ? (Number(reading.mn2) * 2).toString() : "",
-              reading.resistivity?.toString() ?? "",
-              reading.tdip?.toString() ?? ""
-            ]);
-        });
-        
-        const vesSheet = XLSX.utils.aoa_to_sheet(vesData);
-        vesSheet['!autofilter'] = { ref: "A1:E1" };
-        vesSheet['!cols'] = [
-          { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 10 }
-        ];
-        XLSX.utils.book_append_sheet(workbook, vesSheet, `VES${ves.id}`);
-      });
-      
-      // Write file to base64
-      const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-      
-      // Create filename using project name only
-      const filename = `${projectData.name.replace(/\s+/g, '_')}_VES_Data.xlsx`;
-      
-      // Get document directory path
-      const directory = FileSystem.documentDirectory;
-      const fileUri = directory + filename;
-      
-      // Check if file exists and delete it
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        await FileSystem.deleteAsync(fileUri);
-      }
-      
-      // Write file to document directory
-      await FileSystem.writeAsStringAsync(fileUri, wbout, {
-        encoding: FileSystem.EncodingType.Base64
-      });
-      
-      // Share the file
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        dialogTitle: `Share ${projectData.name} VES Data`,
-        UTI: 'com.microsoft.excel.xlsx'
-      });
-      
-    } catch (error) {
-      console.error("Export error:", error);
-      Alert.alert(
-        "Export Failed", 
-        "Could not export project data to Excel",
+        // Updated headers with all columns
         [
-          {
-            text: 'Try Again',
-            onPress: () => exportToExcel()
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          }
+          { v: "AB/2 (m)", s: { font: { bold: true } } },
+          { v: "MN/2 (m)", s: { font: { bold: true } } },
+          { v: "K", s: { font: { bold: true } } },
+          { v: "Resistivity (Ωm)", s: { font: { bold: true } } },
+          { v: "TD/IP", s: { font: { bold: true } } }
         ]
-      );
-    } finally {
-      setIsExporting(false);
+      ];
+
+      // Add all readings with all columns
+      ves.readings.forEach((reading) => {
+        vesData.push([
+          reading.ab2?.toString() ?? "",
+          reading.mn2?.toString() ?? "",
+          reading.k?.toString() ?? "",
+          reading.resistivity?.toString() ?? "",
+          reading.tdip?.toString() ?? ""
+        ]);
+      });
+      
+      const vesSheet = XLSX.utils.aoa_to_sheet(vesData);
+      vesSheet['!autofilter'] = { ref: `A1:E1` };
+      vesSheet['!cols'] = [
+        { wch: 10 }, // AB/2
+        { wch: 10 }, // MN/2
+        { wch: 10 }, // K
+        { wch: 15 }, // Resistivity
+        { wch: 10 }  // TD/IP
+      ];
+      XLSX.utils.book_append_sheet(workbook, vesSheet, `VES${ves.id}`);
+    });
+    
+    // Write file to base64
+    const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+    
+    // Create filename using project name only
+    const filename = `${projectData.name.replace(/\s+/g, '_')}_VES_Data.xlsx`;
+    
+    // Get document directory path
+    const directory = FileSystem.documentDirectory;
+    const fileUri = directory + filename;
+    
+    // Check if file exists and delete it
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (fileInfo.exists) {
+      await FileSystem.deleteAsync(fileUri);
     }
-  };
+    
+    // Write file to document directory
+    await FileSystem.writeAsStringAsync(fileUri, wbout, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    
+    // Share the file
+    await Sharing.shareAsync(fileUri, {
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      dialogTitle: `Share ${projectData.name} VES Data`,
+      UTI: 'com.microsoft.excel.xlsx'
+    });
+    
+  } catch (error) {
+    console.error("Export error:", error);
+    Alert.alert(
+      "Export Failed", 
+      "Could not export project data to Excel",
+      [
+        {
+          text: 'Try Again',
+          onPress: () => exportToExcel()
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   // Check if device is tablet and in landscape
   const isTablet = width >= 768;
@@ -571,6 +581,7 @@ const ViewProjectScreen = () => {
   }
 
   const currentVES = projectData.vesPoints[currentVESIndex] || {};
+  // @ts-ignore
   const { resistivityData, tdipData } = getGraphData(currentVES);
   const vesCount = projectData.vesPoints.length;
 
