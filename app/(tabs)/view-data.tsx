@@ -389,7 +389,7 @@ const ViewProjectScreen = () => {
     if (!ves) return { resistivityData: [], tdipData: [] };
 
     const resistivityData: { x: number; y: number }[] = [];
-    const tdipData = [];
+    const tdipData: { x: number; y: number }[] = [];
 
     ves.readings.forEach((reading) => {
       if (reading.resistivity) {
