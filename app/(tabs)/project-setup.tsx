@@ -148,7 +148,7 @@ const ProjectSetupScreen = () => {
             >
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
-            <Text style={localStyles.headerTitle}>Project Setup</Text>
+            <Text style={localStyles.headerTitle}>Project Setup.</Text>
             <View style={{ width: 24 }} />
           </View>
         </View>
