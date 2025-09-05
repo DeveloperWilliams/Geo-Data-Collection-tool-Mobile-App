@@ -1,20 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
-import { useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import * as Animatable from "react-native-animatable";
 import { Defs, LinearGradient, Path, Stop, Svg } from "react-native-svg";
@@ -24,14 +24,13 @@ const secondaryColor = "#1A56DB";
 const accentColor = "#0E9F6E";
 const lightBackground = "#F9FAFB";
 
-const SignupScreen = () => {
+const LoginScreen = () => {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const [isLoading, setIsLoading] = useState(false);
 
   const [userData, setUserData] = useState({
-    name: "",
     email: "",
   });
 
@@ -54,12 +53,12 @@ const SignupScreen = () => {
     return { manufacturer, modelName, osName, osVersion, androidId };
   };
 
-  const handleSignup = async () => {
+  const handleLogin = async () => {
     setIsLoading(true);
     
     // Validate required fields
-    if (userData.name.trim() === "" || userData.email.trim() === "") {
-      Alert.alert("Missing Fields", "Please fill all required fields");
+    if (userData.email.trim() === "") {
+      Alert.alert("Missing Email", "Please enter your email address");
       setIsLoading(false);
       return;
     }
@@ -76,13 +75,12 @@ const SignupScreen = () => {
     const deviceInfo = await getDeviceInfo();
 
     // Prepare data for API
-    const signupData = {
+    const loginData = {
       user: {
-        name: userData.name,
         email: userData.email,
       },
       device: deviceInfo,
-      method: "signup"
+      method: "login"
     };
 
     try {
@@ -92,37 +90,34 @@ const SignupScreen = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(signupData),
+        body: JSON.stringify(loginData),
       });
 
       const result = await response.json();
 
-      console.log("Signup response:", result);
-
       if (response.ok) {
-        Alert.alert(
-          "Success", 
-          "Account created successfully! Please check your email for verification.",
-          [{ text: "OK", onPress: () => router.replace("/login") }]
-        );
+        router.push({
+          pathname: "/verify",
+          params: { email: userData.email }
+        });
       } else {
         // Handle specific error cases
-        if (response.status === 409) {
+        if (response.status === 404) {
           Alert.alert(
-            "Email Already Exists", 
-            result.message || "This email is already registered. Would you like to login instead?",
+            "Email Not Found", 
+            result.message || "This email is not registered. Would you like to sign up instead?",
             [
               { text: "Cancel", style: "cancel" },
-              { text: "Login", onPress: () => router.replace("/login") }
+              { text: "Sign Up", onPress: () => router.replace("/") }
             ]
           );
         } else {
-          Alert.alert("Signup Failed", result.message || "Something went wrong");
+          Alert.alert("Login Failed", result.message || "Something went wrong");
         }
       }
     } catch (error) {
       Alert.alert("Error", "Network error. Please try again.");
-      console.error("Signup error:", error);
+      console.error("Login error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -163,7 +158,7 @@ const SignupScreen = () => {
             duration={800}
             style={localStyles.headerTitle}
           >
-            Create Account
+            Welcome Back
           </Animatable.Text>
           <Animatable.Text 
             animation="fadeInDown"
@@ -171,7 +166,7 @@ const SignupScreen = () => {
             delay={100}
             style={localStyles.headerSubtitle}
           >
-            Join us to get started
+            Sign in to continue
           </Animatable.Text>
         </View>
 
@@ -184,26 +179,6 @@ const SignupScreen = () => {
             animation="fadeInRight"
             duration={600}
             delay={200}
-            style={localStyles.inputGroup}
-          >
-            <View style={localStyles.labelContainer}>
-              <Ionicons name="person-outline" size={18} color={secondaryColor} />
-              <Text style={localStyles.label}>Full Name *</Text>
-            </View>
-            <TextInput
-              style={localStyles.input}
-              value={userData.name}
-              onChangeText={(text) => handleInputChange('name', text)}
-              placeholder="Enter your full name"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="words"
-            />
-          </Animatable.View>
-
-          <Animatable.View 
-            animation="fadeInRight"
-            duration={600}
-            delay={300}
             style={localStyles.inputGroup}
           >
             <View style={localStyles.labelContainer}>
@@ -231,14 +206,14 @@ const SignupScreen = () => {
                 localStyles.primaryButton,
                 isLoading && localStyles.disabledButton,
               ]}
-              onPress={handleSignup}
+              onPress={handleLogin}
               disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color="white" size="small" />
               ) : (
                 <>
-                  <Text style={localStyles.buttonText}>Create Account</Text>
+                  <Text style={localStyles.buttonText}>Login</Text>
                   <Ionicons
                     name="arrow-forward"
                     size={20}
@@ -257,11 +232,12 @@ const SignupScreen = () => {
             style={localStyles.authOptions}
           >
             <View style={localStyles.authRow}>
-              <TouchableOpacity onPress={() => router.push("/login")}>
-                <Text style={localStyles.authText}>
-                  Already have an account? <Text style={localStyles.authLink}>Login</Text>
-                </Text>
-              </TouchableOpacity>
+              <Text style={localStyles.authText}>
+                Don't have an account?{" "}
+                <Link href="/" style={localStyles.authLink}>
+                  Sign Up
+                </Link>
+              </Text>
             </View>
           </Animatable.View>
         </Animatable.View>
@@ -379,4 +355,4 @@ const localStyles = StyleSheet.create({
   },
 });
 
-export default SignupScreen;
+export default LoginScreen;
